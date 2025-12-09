@@ -233,6 +233,147 @@ const List<Note> notes = [
   Note('B', 'Si'),
 ];
 
+/// Musical staff widget for displaying notes on a 5-line staff
+class MusicalStaff extends StatelessWidget {
+  final int noteIndex; // Index in notes list (0-6)
+  final bool showNoteLabel;
+  final Color staffColor;
+  final Color noteColor;
+
+  const MusicalStaff({
+    super.key,
+    required this.noteIndex,
+    this.showNoteLabel = true,
+    this.staffColor = Colors.black,
+    this.noteColor = Colors.black,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: StaffPainter(
+        noteIndex: noteIndex,
+        showNoteLabel: showNoteLabel,
+        staffColor: staffColor,
+        noteColor: noteColor,
+      ),
+      size: const Size(double.infinity, 200),
+    );
+  }
+}
+
+/// Custom painter to draw musical staff with notes
+class StaffPainter extends CustomPainter {
+  final int noteIndex;
+  final bool showNoteLabel;
+  final Color staffColor;
+  final Color noteColor;
+
+  StaffPainter({
+    required this.noteIndex,
+    required this.showNoteLabel,
+    required this.staffColor,
+    required this.noteColor,
+  });
+
+  // Note positions: C D E F G A B
+  // Staff lines (from top): 0, 1, 2, 3, 4
+  // Spaces (from top): 0.5, 1.5, 2.5, 3.5, 4.5
+  // Each note occupies different positions
+  // C: 4.5 (space below bottom line)
+  // D: 4 (bottom line)
+  // E: 3.5 (space)
+  // F: 3 (line)
+  // G: 2.5 (space)
+  // A: 2 (line)
+  // B: 1.5 (space)
+  
+  static const List<double> notePositions = [
+    4.5, // C
+    4.0, // D
+    3.5, // E
+    3.0, // F
+    2.5, // G
+    2.0, // A
+    1.5, // B
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = staffColor
+      ..strokeWidth = 2;
+
+    final padding = size.width * 0.1;
+    final width = size.width - (padding * 2);
+    final height = size.height;
+    const lineCount = 5;
+    final lineSpacing = height / (lineCount - 0.5);
+
+    // Draw staff lines (5 horizontal lines)
+    for (int i = 0; i < lineCount; i++) {
+      final y = padding + (i * lineSpacing);
+      canvas.drawLine(
+        Offset(padding, y),
+        Offset(size.width - padding, y),
+        paint,
+      );
+    }
+
+    // Draw note
+    final noteY = padding + (notePositions[noteIndex] * lineSpacing);
+    final noteX = size.width / 2;
+    final noteRadius = lineSpacing / 2.2;
+
+    // Note head (filled circle)
+    final notePaint = Paint()
+      ..color = noteColor
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset(noteX, noteY), noteRadius, notePaint);
+
+    // Note stem
+    final stemPaint = Paint()
+      ..color = noteColor
+      ..strokeWidth = 2;
+
+    final stemX = noteX + noteRadius;
+    final stemEndY = noteY - (lineSpacing * 3.5);
+    canvas.drawLine(
+      Offset(stemX, noteY),
+      Offset(stemX, stemEndY),
+      stemPaint,
+    );
+
+    // Draw note label if needed
+    if (showNoteLabel) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: notes[noteIndex].international,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(padding / 2 - textPainter.width / 2, noteY - textPainter.height / 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(StaffPainter oldDelegate) {
+    return oldDelegate.noteIndex != noteIndex ||
+        oldDelegate.staffColor != staffColor ||
+        oldDelegate.noteColor != noteColor;
+  }
+}
+
 /// A page allowing the user to learn the notes via flashcards.
 class LearnPage extends StatefulWidget {
   const LearnPage({super.key});
@@ -250,6 +391,7 @@ class _LearnPageState extends State<LearnPage> {
   bool _listenMode = false;
   List<int> _learnOptions = [];
   String? _learnFeedback;
+  bool _useStaffNotation = false; // Toggle between flashcard and staff
 
   void _nextCard() {
     setState(() {
@@ -351,55 +493,134 @@ class _LearnPageState extends State<LearnPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Học nốt nhạc',
-              style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: verticalPadding),
-            // Flashcard container - Fixed height based on screen
-            SizedBox(
-              height: cardHeight,
-              child: GestureDetector(
-                onTap: _listenMode ? null : _toggleAnswer,
-                child: Card(
-                  elevation: 4,
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Học nốt nhạc',
+                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                // Toggle between flashcard and staff notation
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, animation) {
-                        return ScaleTransition(scale: animation, child: child);
-                      },
-                      child: _showAnswer
-                          ? Text(
-                              currentNote.solfege,
-                              key: ValueKey<bool>(_showAnswer),
-                              style: TextStyle(
-                                fontSize: cardFontSize,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : Text(
-                              currentNote.international,
-                              key: ValueKey<bool>(_showAnswer),
-                              style: TextStyle(
-                                fontSize: cardFontSize,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: !_useStaffNotation ? null : () {
+                          setState(() => _useStaffNotation = false);
+                        },
+                        child: Text(
+                          '🎴',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: !_useStaffNotation ? Colors.blue : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: _useStaffNotation ? null : () {
+                          setState(() => _useStaffNotation = true);
+                        },
+                        child: Text(
+                          '🎼',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: _useStaffNotation ? Colors.blue : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+              ],
+            ),
+            SizedBox(height: verticalPadding),
+            // Flashcard or Staff notation container
+            SizedBox(
+              height: cardHeight,
+              child: _useStaffNotation
+                  ? GestureDetector(
+                      onTap: _listenMode ? null : _toggleAnswer,
+                      child: Card(
+                        elevation: 4,
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: MusicalStaff(
+                                  noteIndex: _currentIndex,
+                                  showNoteLabel: !_showAnswer,
+                                ),
+                              ),
+                              if (_showAnswer)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    '${currentNote.international} (${currentNote.solfege})',
+                                    style: TextStyle(
+                                      fontSize: isMobile ? 18 : 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : GestureDetector(
+                      onTap: _listenMode ? null : _toggleAnswer,
+                      child: Card(
+                        elevation: 4,
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            transitionBuilder: (child, animation) {
+                              return ScaleTransition(scale: animation, child: child);
+                            },
+                            child: _showAnswer
+                                ? Text(
+                                    currentNote.solfege,
+                                    key: ValueKey<bool>(_showAnswer),
+                                    style: TextStyle(
+                                      fontSize: cardFontSize,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : Text(
+                                    currentNote.international,
+                                    key: ValueKey<bool>(_showAnswer),
+                                    style: TextStyle(
+                                      fontSize: cardFontSize,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
             ),
             SizedBox(height: verticalPadding),
             // Instruction text
             Text(
-              'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
+              _useStaffNotation
+                  ? 'Chạm để xem tên nốt'
+                  : 'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
               style: TextStyle(fontSize: isMobile ? 14 : 16),
               textAlign: TextAlign.center,
             ),
