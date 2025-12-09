@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'dart:ui' as ui;
 
 // Global audio player and helper to play note assets by index.
 final AudioPlayer _globalAudioPlayer = AudioPlayer();
@@ -250,14 +251,17 @@ class MusicalStaff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: StaffPainter(
-        noteIndex: noteIndex,
-        showNoteLabel: showNoteLabel,
-        staffColor: staffColor,
-        noteColor: noteColor,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: CustomPaint(
+        painter: StaffPainter(
+          noteIndex: noteIndex,
+          showNoteLabel: showNoteLabel,
+          staffColor: staffColor,
+          noteColor: noteColor,
+        ),
+        size: Size.infinite,
       ),
-      size: const Size(double.infinity, 200),
     );
   }
 }
@@ -304,15 +308,17 @@ class StaffPainter extends CustomPainter {
       ..color = staffColor
       ..strokeWidth = 2;
 
-    final padding = size.width * 0.1;
+    // Ensure minimum height for proper rendering
+    final availableHeight = size.height > 0 ? size.height : 180;
+    
+    final padding = size.width * 0.05; // Reduced from 0.1
     final width = size.width - (padding * 2);
-    final height = size.height;
     const lineCount = 5;
-    final lineSpacing = height / (lineCount - 0.5);
+    final lineSpacing = availableHeight / (lineCount + 1); // Better spacing
 
     // Draw staff lines (5 horizontal lines)
     for (int i = 0; i < lineCount; i++) {
-      final y = padding + (i * lineSpacing);
+      final y = padding + (i * lineSpacing) + 20; // Add top offset
       canvas.drawLine(
         Offset(padding, y),
         Offset(size.width - padding, y),
@@ -321,9 +327,9 @@ class StaffPainter extends CustomPainter {
     }
 
     // Draw note
-    final noteY = padding + (notePositions[noteIndex] * lineSpacing);
+    final noteY = padding + 20 + (notePositions[noteIndex] * lineSpacing);
     final noteX = size.width / 2;
-    final noteRadius = lineSpacing / 2.2;
+    final noteRadius = lineSpacing / 2.8; // Adjust note size
 
     // Note head (filled circle)
     final notePaint = Paint()
@@ -337,8 +343,8 @@ class StaffPainter extends CustomPainter {
       ..color = noteColor
       ..strokeWidth = 2;
 
-    final stemX = noteX + noteRadius;
-    final stemEndY = noteY - (lineSpacing * 3.5);
+    final stemX = noteX + noteRadius + 2;
+    final stemEndY = noteY - (lineSpacing * 3);
     canvas.drawLine(
       Offset(stemX, noteY),
       Offset(stemX, stemEndY),
@@ -352,16 +358,16 @@ class StaffPainter extends CustomPainter {
           text: notes[noteIndex].international,
           style: const TextStyle(
             color: Colors.black,
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
-        textDirection: TextDirection.ltr,
+        textDirection: ui.TextDirection.ltr,
       );
       textPainter.layout();
       textPainter.paint(
         canvas,
-        Offset(padding / 2 - textPainter.width / 2, noteY - textPainter.height / 2),
+        Offset(12, noteY - textPainter.height / 2),
       );
     }
   }
@@ -1042,16 +1048,69 @@ class _TestPageState extends State<TestPage> {
   @override
   void initState() {
     super.initState();
-    _initPrefs();
+    _initPrefsAndShowNameDialog();
     _prepareTest();
   }
 
-  Future<void> _initPrefs() async {
+  Future<void> _initPrefsAndShowNameDialog() async {
     _prefs = await SharedPreferences.getInstance();
-    final savedName = _prefs.getString('playerName') ?? 'Guest';
+    final savedName = _prefs.getString('playerName');
+    
     setState(() {
-      _playerName = savedName;
+      if (savedName != null) {
+        _playerName = savedName;
+      } else {
+        // Show dialog to get player name if not saved
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showPlayerNameDialog();
+        });
+      }
     });
+  }
+
+  Future<void> _showPlayerNameDialog() async {
+    final TextEditingController nameController = TextEditingController();
+    
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Nhập tên của bạn'),
+          content: TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              hintText: 'Nhập tên người chơi',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (value) {
+              if (value.isNotEmpty) {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  setState(() {
+                    _playerName = name;
+                  });
+                  _prefs.setString('playerName', name);
+                  Navigator.of(context).pop();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Vui lòng nhập tên')),
+                  );
+                }
+              },
+              child: const Text('Xác nhận'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _saveTestResult() async {
@@ -1174,6 +1233,81 @@ class _TestPageState extends State<TestPage> {
     _prepareTest();
   }
 
+  Widget _buildTestFinishedScreen(bool isMobile, double horizontalPadding, double verticalPadding, double titleFontSize) {
+    final accuracy = (_score / _totalQuestions * 100).toStringAsFixed(1);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(horizontalPadding),
+        child: SingleChildScrollView(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '🎉 Hoàn thành kiểm tra!',
+                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: verticalPadding),
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Tổng điểm',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                        Text(
+                          '$_score/$_totalQuestions',
+                          style: TextStyle(fontSize: isMobile ? 32 : 48, fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                        Text(
+                          'Độ chính xác: $accuracy%',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(height: verticalPadding),
+                if (_mode == TestMode.mixed || _audioScore > 0)
+                  _buildScoreCard('🎵 Nghe nhạc', _audioScore, 'Audio'),
+                if (_mode == TestMode.mixed || _solfegeScore > 0)
+                  _buildScoreCard('🎼 Solfège', _solfegeScore, 'Solfège'),
+                if (_mode == TestMode.mixed || _keyScore > 0)
+                  _buildScoreCard('⌨️ Phím', _keyScore, 'Keys'),
+                SizedBox(height: verticalPadding),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _restartTest,
+                        child: const Text('Làm lại'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          // Navigate to leaderboard using named route
+                          Navigator.of(context).pushNamed('/leaderboard');
+                        },
+                        child: const Text('Xem Leaderboard'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 768;
@@ -1182,80 +1316,17 @@ class _TestPageState extends State<TestPage> {
     final titleFontSize = isMobile ? 24.0 : 28.0;
     
     if (_testFinished) {
-      final accuracy = (_score / _totalQuestions * 100).toStringAsFixed(1);
-      return SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(horizontalPadding),
-          child: SingleChildScrollView(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '🎉 Hoàn thành kiểm tra!',
-                    style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: verticalPadding),
-                  Card(
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Tổng điểm',
-                            style: TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                          Text(
-                            '$_score/$_totalQuestions',
-                            style: TextStyle(fontSize: isMobile ? 32 : 48, fontWeight: FontWeight.bold, color: Colors.blue),
-                          ),
-                          Text(
-                            'Độ chính xác: $accuracy%',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: verticalPadding),
-                  if (_mode == TestMode.mixed || _audioScore > 0)
-                    _buildScoreCard('🎵 Nghe nhạc', _audioScore, 'Audio'),
-                  if (_mode == TestMode.mixed || _solfegeScore > 0)
-                    _buildScoreCard('🎼 Solfège', _solfegeScore, 'Solfège'),
-                  if (_mode == TestMode.mixed || _keyScore > 0)
-                    _buildScoreCard('⌨️ Phím', _keyScore, 'Keys'),
-                  SizedBox(height: verticalPadding),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _restartTest,
-                          child: const Text('Làm lại'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () {
-                            // Navigate to leaderboard using named route
-                            Navigator.of(context).pushNamed('/leaderboard');
-                          },
-                          child: const Text('Xem Leaderboard'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      return _buildTestFinishedScreen(isMobile, horizontalPadding, verticalPadding, titleFontSize);
     }
-    final currentQ = _questions.isNotEmpty ? _questions[_currentQuestion] : Question(_random.nextInt(notes.length), TestMode.audioToNote);
+    // Safety check: ensure current question index is valid
+    if (_currentQuestion >= _questions.length) {
+      setState(() {
+        _testFinished = true;
+      });
+      _saveTestResult();
+      return _buildTestFinishedScreen(isMobile, horizontalPadding, verticalPadding, titleFontSize);
+    }
+    final currentQ = _questions[_currentQuestion];
     
     return SafeArea(
       child: Padding(
