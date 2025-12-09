@@ -91,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const LearnPage(),
     const MatchPage(),
     const TestPage(),
+    const LeaderboardPage(),
   ];
 
   void _onItemTapped(int index) {
@@ -105,11 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
     
     return Scaffold(
       body: _pages[_selectedIndex],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, '/leaderboard'),
-        label: const Text('Bảng xếp hạng'),
-        icon: const Icon(Icons.emoji_events),
-      ),
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
               currentIndex: _selectedIndex,
@@ -129,6 +125,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icon(Icons.quiz_outlined),
                   label: 'Test',
                 ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.emoji_events),
+                  label: 'Xếp hạng',
+                ),
               ],
             )
           : NavigationBar(
@@ -146,6 +146,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 NavigationDestination(
                   icon: Icon(Icons.quiz_outlined),
                   label: 'Kiểm tra',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.emoji_events),
+                  label: 'Bảng xếp hạng',
                 ),
               ],
             ),
@@ -1286,172 +1290,166 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
     final verticalPadding = isMobile ? 12.0 : 24.0;
     final titleFontSize = isMobile ? 24.0 : 28.0;
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(horizontalPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '🏆 Bảng Xếp Hạng',
-                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            SizedBox(height: verticalPadding),
-            // Filter buttons
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FilterChip(
-                    label: const Text('Tất cả'),
-                    selected: _filterMode == null,
-                    onSelected: (_) {
-                      setState(() => _filterMode = null);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('🎵 Nghe'),
-                    selected: _filterMode == TestMode.audioToNote,
-                    onSelected: (_) {
-                      setState(() => _filterMode = TestMode.audioToNote);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('🎼 Solfège'),
-                    selected: _filterMode == TestMode.solfegeToIntl,
-                    onSelected: (_) {
-                      setState(() => _filterMode = TestMode.solfegeToIntl);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('⌨️ Phím'),
-                    selected: _filterMode == TestMode.intlToKey,
-                    onSelected: (_) {
-                      setState(() => _filterMode = TestMode.intlToKey);
-                    },
-                  ),
-                ],
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(horizontalPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '🏆 Bảng Xếp Hạng',
+                style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
-            ),
-            SizedBox(height: verticalPadding),
-            // Leaderboard list
-            Expanded(
-              child: _leaderboard.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Chưa có kết quả nào',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _leaderboard.length,
-                      itemBuilder: (context, index) {
-                        final entry = _leaderboard[index];
-                        
-                        // Apply filter
-                        if (_filterMode != null && entry.result.mode != _filterMode) {
-                          return const SizedBox.shrink();
-                        }
-
-                        final medal = entry.rank == 1
-                            ? '🥇'
-                            : entry.rank == 2
-                                ? '🥈'
-                                : entry.rank == 3
-                                    ? '🥉'
-                                    : '';
-                        final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
-                        final formattedDate = dateFormat.format(entry.result.timestamp);
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 8),
-                          elevation: entry.rank <= 3 ? 4 : 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      '$medal #${entry.rank} ${entry.result.playerName}',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: entry.rank <= 3 ? Colors.blue : Colors.black,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${entry.result.totalScore} điểm',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      formattedDate,
-                                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                                    ),
-                                    Text(
-                                      '${(entry.accuracy).toStringAsFixed(1)}%',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: entry.accuracy >= 80 ? Colors.green : Colors.orange,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (entry.result.mode != TestMode.mixed)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Text(
-                                      _getModeLabel(entry.result.mode),
-                                      style: TextStyle(fontSize: 12, color: Colors.blue),
-                                    ),
-                                  ),
-                                if (entry.result.mode == TestMode.mixed)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Row(
-                                      children: [
-                                        Text('🎵: ${entry.result.audioScore}  ', style: const TextStyle(fontSize: 11)),
-                                        Text('🎼: ${entry.result.solfegeScore}  ', style: const TextStyle(fontSize: 11)),
-                                        Text('⌨️: ${entry.result.keyScore}', style: const TextStyle(fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
+              SizedBox(height: verticalPadding),
+              // Filter buttons
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('Tất cả'),
+                      selected: _filterMode == null,
+                      onSelected: (_) {
+                        setState(() => _filterMode = null);
                       },
                     ),
-            ),
-          ],
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('🎵 Nghe'),
+                      selected: _filterMode == TestMode.audioToNote,
+                      onSelected: (_) {
+                        setState(() => _filterMode = TestMode.audioToNote);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('🎼 Solfège'),
+                      selected: _filterMode == TestMode.solfegeToIntl,
+                      onSelected: (_) {
+                        setState(() => _filterMode = TestMode.solfegeToIntl);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('⌨️ Phím'),
+                      selected: _filterMode == TestMode.intlToKey,
+                      onSelected: (_) {
+                        setState(() => _filterMode = TestMode.intlToKey);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: verticalPadding),
+              // Leaderboard list
+              Expanded(
+                child: _leaderboard.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Chưa có kết quả nào',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _leaderboard.length,
+                        itemBuilder: (context, index) {
+                          final entry = _leaderboard[index];
+                          
+                          // Apply filter
+                          if (_filterMode != null && entry.result.mode != _filterMode) {
+                            return const SizedBox.shrink();
+                          }
+
+                          final medal = entry.rank == 1
+                              ? '🥇'
+                              : entry.rank == 2
+                                  ? '🥈'
+                                  : entry.rank == 3
+                                      ? '🥉'
+                                      : '';
+                          final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+                          final formattedDate = dateFormat.format(entry.result.timestamp);
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            elevation: entry.rank <= 3 ? 4 : 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '$medal #${entry.rank} ${entry.result.playerName}',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: entry.rank <= 3 ? Colors.blue : Colors.black,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${entry.result.totalScore} điểm',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        formattedDate,
+                                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                      Text(
+                                        '${(entry.accuracy).toStringAsFixed(1)}%',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: entry.accuracy >= 80 ? Colors.green : Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (entry.result.mode != TestMode.mixed)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Text(
+                                        _getModeLabel(entry.result.mode),
+                                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                                      ),
+                                    ),
+                                  if (entry.result.mode == TestMode.mixed)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Row(
+                                        children: [
+                                          Text('🎵: ${entry.result.audioScore}  ', style: const TextStyle(fontSize: 11)),
+                                          Text('🎼: ${entry.result.solfegeScore}  ', style: const TextStyle(fontSize: 11)),
+                                          Text('⌨️: ${entry.result.keyScore}', style: const TextStyle(fontSize: 11)),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
