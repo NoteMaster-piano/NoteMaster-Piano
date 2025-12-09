@@ -260,192 +260,198 @@ class _LearnPageState extends State<LearnPage> {
   Widget build(BuildContext context) {
     final currentNote = notes[_currentIndex];
     final isMobile = MediaQuery.of(context).size.width < 768;
+    final screenHeight = MediaQuery.of(context).size.height;
     final horizontalPadding = isMobile ? 16.0 : 24.0;
-    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final verticalPadding = isMobile ? 8.0 : 12.0;
     final cardFontSize = isMobile ? 48.0 : 64.0;
     final titleFontSize = isMobile ? 24.0 : 28.0;
+    final cardHeight = isMobile ? screenHeight * 0.35 : 250.0;
 
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.all(horizontalPadding),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Học nốt nhạc',
-                style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: verticalPadding),
-              // Flashcard container
-              ConstrainedBox(
-                constraints: BoxConstraints(minHeight: isMobile ? 200 : 250),
-                child: GestureDetector(
-                  onTap: _listenMode ? null : _toggleAnswer,
-                  child: Card(
-                    elevation: 4,
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        transitionBuilder: (child, animation) {
-                          return ScaleTransition(scale: animation, child: child);
-                        },
-                        child: _showAnswer
-                            ? Text(
-                                currentNote.solfege,
-                                key: ValueKey<bool>(_showAnswer),
-                                style: TextStyle(
-                                  fontSize: cardFontSize,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : Text(
-                                currentNote.international,
-                                key: ValueKey<bool>(_showAnswer),
-                                style: TextStyle(
-                                  fontSize: cardFontSize,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                      ),
-                    ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Học nốt nhạc',
+              style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: verticalPadding),
+            // Flashcard container - Fixed height based on screen
+            SizedBox(
+              height: cardHeight,
+              child: GestureDetector(
+                onTap: _listenMode ? null : _toggleAnswer,
+                child: Card(
+                  elevation: 4,
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                ),
-              ),
-              SizedBox(height: verticalPadding),
-              // Instruction and control buttons
-              Text(
-                'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
-                style: TextStyle(fontSize: isMobile ? 14 : 16),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: verticalPadding),
-              // Responsive button layout
-              if (isMobile)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _toggleAnswer,
-                            icon: const Icon(Icons.flip),
-                            label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _nextCard,
-                            icon: const Icon(Icons.navigate_next),
-                            label: const Text('Tiếp theo'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _isPlaying ? null : _playCurrentNote,
-                            icon: const Icon(Icons.volume_up),
-                            label: Text(_isPlaying ? 'Phát...' : 'Nghe'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _listenMode ? _stopListenMode : _startListenMode,
-                            icon: const Icon(Icons.hearing),
-                            label: Text(_listenMode ? 'Thoát' : 'Nghe & Chọn'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _toggleAnswer,
-                      icon: const Icon(Icons.flip),
-                      label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
-                    ),
-                    const SizedBox(width: 16),
-                    FilledButton.icon(
-                      onPressed: _nextCard,
-                      icon: const Icon(Icons.navigate_next),
-                      label: const Text('Tiếp theo'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: _isPlaying ? null : _playCurrentNote,
-                      icon: const Icon(Icons.volume_up),
-                      label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: _listenMode ? _stopListenMode : _startListenMode,
-                      icon: const Icon(Icons.hearing),
-                      label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
-                    ),
-                  ],
-                ),
-              SizedBox(height: verticalPadding),
-              // If in listen-and-choose mode, show choices
-              if (_listenMode) ...[
-                SizedBox(height: verticalPadding),
-                Center(
-                  child: FilledButton.icon(
-                    onPressed: () => playNoteAssetByIndex(_currentIndex),
-                    icon: const Icon(Icons.volume_up),
-                    label: const Text('Nghe nốt'),
-                  ),
-                ),
-                SizedBox(height: verticalPadding),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: List.generate(_learnOptions.length, (i) {
-                    final idx = _learnOptions[i];
-                    return ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          if (idx == _currentIndex) {
-                            _learnFeedback = 'Đúng!';
-                          } else {
-                            _learnFeedback = 'Sai';
-                          }
-                          // play selection sound
-                          playNoteAssetByIndex(idx);
-                        });
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) {
+                        return ScaleTransition(scale: animation, child: child);
                       },
-                      child: Text(notes[idx].international),
-                    );
-                  }),
-                ),
-                if (_learnFeedback != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12.0),
-                    child: Center(
-                      child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+                      child: _showAnswer
+                          ? Text(
+                              currentNote.solfege,
+                              key: ValueKey<bool>(_showAnswer),
+                              style: TextStyle(
+                                fontSize: cardFontSize,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : Text(
+                              currentNote.international,
+                              key: ValueKey<bool>(_showAnswer),
+                              style: TextStyle(
+                                fontSize: cardFontSize,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
-              ],
-            ],
-          ),
+                ),
+              ),
+            ),
+            SizedBox(height: verticalPadding),
+            // Instruction text
+            Text(
+              'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
+              style: TextStyle(fontSize: isMobile ? 14 : 16),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: verticalPadding),
+            // Responsive button layout
+            if (isMobile)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _toggleAnswer,
+                          icon: const Icon(Icons.flip),
+                          label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _nextCard,
+                          icon: const Icon(Icons.navigate_next),
+                          label: const Text('Tiếp'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isPlaying ? null : _playCurrentNote,
+                          icon: const Icon(Icons.volume_up),
+                          label: Text(_isPlaying ? 'Phát...' : 'Nghe'),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _listenMode ? _stopListenMode : _startListenMode,
+                          icon: const Icon(Icons.hearing),
+                          label: Text(_listenMode ? 'Thoát' : 'Chọn'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _toggleAnswer,
+                    icon: const Icon(Icons.flip),
+                    label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                  ),
+                  const SizedBox(width: 16),
+                  FilledButton.icon(
+                    onPressed: _nextCard,
+                    icon: const Icon(Icons.navigate_next),
+                    label: const Text('Tiếp theo'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _isPlaying ? null : _playCurrentNote,
+                    icon: const Icon(Icons.volume_up),
+                    label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _listenMode ? _stopListenMode : _startListenMode,
+                    icon: const Icon(Icons.hearing),
+                    label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
+                  ),
+                ],
+              ),
+            SizedBox(height: verticalPadding),
+            // If in listen-and-choose mode, show choices
+            if (_listenMode)
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Center(
+                        child: FilledButton.icon(
+                          onPressed: () => playNoteAssetByIndex(_currentIndex),
+                          icon: const Icon(Icons.volume_up),
+                          label: const Text('Nghe nốt'),
+                        ),
+                      ),
+                      SizedBox(height: verticalPadding),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: List.generate(_learnOptions.length, (i) {
+                          final idx = _learnOptions[i];
+                          return ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                if (idx == _currentIndex) {
+                                  _learnFeedback = 'Đúng!';
+                                } else {
+                                  _learnFeedback = 'Sai';
+                                }
+                                // play selection sound
+                                playNoteAssetByIndex(idx);
+                              });
+                            },
+                            child: Text(notes[idx].international),
+                          );
+                        }),
+                      ),
+                      if (_learnFeedback != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12.0),
+                          child: Center(
+                            child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
