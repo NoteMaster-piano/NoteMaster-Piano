@@ -235,32 +235,72 @@ const List<Note> notes = [
 ];
 
 /// Musical staff widget for displaying notes on a 5-line staff
-class MusicalStaff extends StatelessWidget {
+class MusicalStaff extends StatefulWidget {
   final int noteIndex; // Index in notes list (0-6)
-  final bool showNoteLabel;
   final Color staffColor;
   final Color noteColor;
+  /// Whether the label should be initially visible. Default false (hidden).
+  final bool initiallyShowNoteLabel;
 
   const MusicalStaff({
     super.key,
     required this.noteIndex,
-    this.showNoteLabel = true,
+    this.initiallyShowNoteLabel = false,
     this.staffColor = Colors.black,
     this.noteColor = Colors.black,
   });
 
   @override
+  State<MusicalStaff> createState() => _MusicalStaffState();
+}
+
+class _MusicalStaffState extends State<MusicalStaff> {
+  late bool _showLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    _showLabel = widget.initiallyShowNoteLabel;
+  }
+
+  void _toggleLabel() {
+    setState(() {
+      _showLabel = !_showLabel;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: CustomPaint(
-        painter: StaffPainter(
-          noteIndex: noteIndex,
-          showNoteLabel: showNoteLabel,
-          staffColor: staffColor,
-          noteColor: noteColor,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleLabel,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Ensure we have finite dimensions for CustomPaint
+            final width = (constraints.maxWidth.isFinite && constraints.maxWidth > 0)
+                ? constraints.maxWidth
+                : MediaQuery.of(context).size.width - 32;
+            final height = (constraints.maxHeight.isFinite && constraints.maxHeight > 0)
+                ? constraints.maxHeight
+                : 180.0;
+
+            return SizedBox(
+              width: width,
+              height: height,
+              child: CustomPaint(
+                painter: StaffPainter(
+                  noteIndex: widget.noteIndex,
+                  showNoteLabel: _showLabel,
+                  staffColor: widget.staffColor,
+                  noteColor: widget.noteColor,
+                ),
+                size: Size(width, height),
+              ),
+            );
+          },
         ),
-        size: Size.infinite,
       ),
     );
   }
@@ -293,13 +333,13 @@ class StaffPainter extends CustomPainter {
   // B: 1.5 (space)
   
   static const List<double> notePositions = [
-    4.5, // C
-    4.0, // D
-    3.5, // E
-    3.0, // F
-    2.5, // G
-    2.0, // A
-    1.5, // B
+    5.0, // C (shifted down one step)
+    4.5, // D
+    4.0, // E (Mi) -> bottom line
+    3.5, // F (Fa) -> space between line 1 and 2 from bottom
+    3.0, // G
+    2.5, // A
+    2.0, // B (Si) -> third line from bottom
   ];
 
   @override
@@ -307,29 +347,33 @@ class StaffPainter extends CustomPainter {
     final paint = Paint()
       ..color = staffColor
       ..strokeWidth = 2;
+    // Ensure we use the provided finite height; fall back to a sensible default
+    final availableHeight = (size.height.isFinite && size.height > 0) ? size.height : 180.0;
+    final availableWidth = (size.width.isFinite && size.width > 0) ? size.width : 300.0;
 
-    // Ensure minimum height for proper rendering
-    final availableHeight = size.height > 0 ? size.height : 180;
-    
-    final padding = size.width * 0.05; // Reduced from 0.1
-    final width = size.width - (padding * 2);
+    // Padding inside the paintable area
+    final horizontalPadding = availableWidth * 0.04; // 4%
+    final verticalPadding = availableHeight * 0.12; // 12% top/bottom padding
+
     const lineCount = 5;
-    final lineSpacing = availableHeight / (lineCount + 1); // Better spacing
+    // Compute line spacing so the 5 lines fit between top and bottom padding
+    final usableHeight = availableHeight - (verticalPadding * 2);
+    final lineSpacing = usableHeight / (lineCount - 1);
 
     // Draw staff lines (5 horizontal lines)
     for (int i = 0; i < lineCount; i++) {
-      final y = padding + (i * lineSpacing) + 20; // Add top offset
+      final y = verticalPadding + (i * lineSpacing);
       canvas.drawLine(
-        Offset(padding, y),
-        Offset(size.width - padding, y),
+        Offset(horizontalPadding, y),
+        Offset(availableWidth - horizontalPadding, y),
         paint,
       );
     }
 
     // Draw note
-    final noteY = padding + 20 + (notePositions[noteIndex] * lineSpacing);
-    final noteX = size.width / 2;
-    final noteRadius = lineSpacing / 2.8; // Adjust note size
+    final noteY = verticalPadding + (notePositions[noteIndex] * (lineSpacing / 1.0));
+    final noteX = availableWidth / 2;
+    final noteRadius = lineSpacing * 0.45; // note slightly less than half spacing
 
     // Note head (filled circle)
     final notePaint = Paint()
@@ -344,7 +388,7 @@ class StaffPainter extends CustomPainter {
       ..strokeWidth = 2;
 
     final stemX = noteX + noteRadius + 2;
-    final stemEndY = noteY - (lineSpacing * 3);
+    final stemEndY = noteY - (lineSpacing * 2.8);
     canvas.drawLine(
       Offset(stemX, noteY),
       Offset(stemX, stemEndY),
@@ -356,18 +400,19 @@ class StaffPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: notes[noteIndex].international,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.black,
-            fontSize: 20,
+            fontSize: (lineSpacing * 0.9).clamp(12.0, 28.0),
             fontWeight: FontWeight.bold,
           ),
         ),
         textDirection: ui.TextDirection.ltr,
       );
       textPainter.layout();
+      // Place label left aligned, vertically centered on the note
       textPainter.paint(
         canvas,
-        Offset(12, noteY - textPainter.height / 2),
+        Offset(horizontalPadding / 2, noteY - textPainter.height / 2),
       );
     }
   }
@@ -550,38 +595,34 @@ class _LearnPageState extends State<LearnPage> {
             SizedBox(
               height: cardHeight,
               child: _useStaffNotation
-                  ? GestureDetector(
-                      onTap: _listenMode ? null : _toggleAnswer,
-                      child: Card(
-                        elevation: 4,
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: MusicalStaff(
-                                  noteIndex: _currentIndex,
-                                  showNoteLabel: !_showAnswer,
-                                ),
+                  ? Card(
+                      elevation: 4,
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: MusicalStaff(
+                                noteIndex: _currentIndex,
                               ),
-                              if (_showAnswer)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    '${currentNote.international} (${currentNote.solfege})',
-                                    style: TextStyle(
-                                      fontSize: isMobile ? 18 : 22,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                            ),
+                            if (_showAnswer)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  '${currentNote.international} (${currentNote.solfege})',
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 18 : 22,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
                       ),
                     )
