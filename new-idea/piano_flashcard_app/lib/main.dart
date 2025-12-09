@@ -1,6 +1,31 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
+
+// Global audio player and helper to play note assets by index.
+final AudioPlayer _globalAudioPlayer = AudioPlayer();
+
+Future<void> playNoteAssetByIndex(int index) async {
+  if (index < 0 || index >= notes.length) return;
+  final note = notes[index];
+  final asset = 'audio/${note.international}4.wav'; // corresponds to assets/audio/C4.wav
+  try {
+    await _globalAudioPlayer.stop();
+    await _globalAudioPlayer.play(AssetSource(asset));
+  } catch (e) {
+    // log error for debugging
+    print('Audio playback error: $e');
+  }
+}
+
+// Shared helper to create multiple-choice option indices.
+List<int> makeOptionsRandom(int correct, Random rnd, {int count = 4}) {
+  final set = <int>{correct};
+  while (set.length < count) set.add(rnd.nextInt(notes.length));
+  final list = set.toList()..shuffle(rnd);
+  return list;
+}
 
 /// Entry point of the application.
 ///
@@ -122,6 +147,9 @@ class _LearnPageState extends State<LearnPage> {
   final Random _random = Random();
   bool _isPlaying = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _listenMode = false;
+  List<int> _learnOptions = [];
+  String? _learnFeedback;
 
   void _nextCard() {
     setState(() {
@@ -144,6 +172,21 @@ class _LearnPageState extends State<LearnPage> {
     super.initState();
     // start with a random card
     _currentIndex = _random.nextInt(notes.length);
+  }
+
+  void _startListenMode() {
+    setState(() {
+      _listenMode = true;
+      _learnFeedback = null;
+      _learnOptions = makeOptionsRandom(_currentIndex, _random);
+    });
+  }
+
+  void _stopListenMode() {
+    setState(() {
+      _listenMode = false;
+      _learnFeedback = null;
+    });
   }
 
   // Play the piano sample for the current note from assets.
@@ -209,7 +252,7 @@ class _LearnPageState extends State<LearnPage> {
             // Flashcard container
             Expanded(
               child: GestureDetector(
-                onTap: _toggleAnswer,
+                onTap: _listenMode ? null : _toggleAnswer,
                 child: Card(
                   elevation: 4,
                   color: Theme.of(context).colorScheme.primaryContainer,
@@ -272,9 +315,56 @@ class _LearnPageState extends State<LearnPage> {
                   icon: const Icon(Icons.volume_up),
                   label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
                 ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _listenMode ? _stopListenMode : _startListenMode,
+                  icon: const Icon(Icons.hearing),
+                  label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
+                ),
               ],
             ),
             const SizedBox(height: 16),
+            // If in listen-and-choose mode, show choices
+            if (_listenMode) ...[
+              const SizedBox(height: 16),
+              Center(
+                child: FilledButton.icon(
+                  onPressed: () => playNoteAssetByIndex(_currentIndex),
+                  icon: const Icon(Icons.volume_up),
+                  label: const Text('Nghe nốt'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: List.generate(_learnOptions.length, (i) {
+                  final idx = _learnOptions[i];
+                  return ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        if (idx == _currentIndex) {
+                          _learnFeedback = 'Đúng!';
+                        } else {
+                          _learnFeedback = 'Sai';
+                        }
+                        // play selection sound
+                        playNoteAssetByIndex(idx);
+                      });
+                    },
+                    child: Text(notes[idx].international),
+                  );
+                }),
+              ),
+              if (_learnFeedback != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0),
+                  child: Center(
+                    child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -298,15 +388,18 @@ class PianoKeys extends StatefulWidget {
 
 class _PianoKeysState extends State<PianoKeys> {
   // Map QWERTYU -> indices 0..6
-  static const _keyMap = {
-    81: 0, // q
-    87: 1, // w
-    69: 2, // e
-    82: 3, // r
-    84: 4, // t
-    89: 5, // y
-    85: 6, // u
+  static const _keyMapLabel = {
+    'q': 0,
+    'w': 1,
+    'e': 2,
+    'r': 3,
+    't': 4,
+    'y': 5,
+    'u': 6,
   };
+
+  // QWERTY display labels
+  static const _qwertyLabels = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U'];
 
   FocusNode _focusNode = FocusNode();
 
@@ -325,10 +418,10 @@ class _PianoKeysState extends State<PianoKeys> {
     super.dispose();
   }
 
-  void _handleKey(RawKeyEvent event) {
-    if (event is RawKeyDownEvent) {
-      final code = event.logicalKey.keyId & 0xffff; // normalize
-      final mapped = _keyMap[code];
+  void _handleKey(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final label = event.logicalKey.keyLabel.toLowerCase();
+      final mapped = _keyMapLabel[label];
       if (mapped != null) {
         widget.onKeyTapped(mapped);
       }
@@ -337,9 +430,9 @@ class _PianoKeysState extends State<PianoKeys> {
 
   @override
   Widget build(BuildContext context) {
-    return RawKeyboardListener(
+    return KeyboardListener(
       focusNode: _focusNode,
-      onKey: _handleKey,
+      onKeyEvent: _handleKey,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final whiteKeyWidth = constraints.maxWidth / notes.length;
@@ -365,8 +458,14 @@ class _PianoKeysState extends State<PianoKeys> {
                           border: Border.all(color: Colors.black, width: 1),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: Text(notes[index].international, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          padding: const EdgeInsets.only(bottom: 4.0, right: 4.0),
+                          child: Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text(
+                              _qwertyLabels[index],
+                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -443,6 +542,8 @@ class _MatchPageState extends State<MatchPage> {
   void _handleKeyTap(int index) {
     setState(() {
       _selectedIndex = index;
+      // play the sound for the tapped key
+      playNoteAssetByIndex(index);
       if (index == _currentNoteIndex) {
         _feedback = 'Chính xác!';
       } else {
@@ -516,10 +617,20 @@ class TestPage extends StatefulWidget {
   State<TestPage> createState() => _TestPageState();
 }
 
+enum TestMode { mixed, audioToNote, solfegeToIntl, intlToKey }
+
+class Question {
+  final int noteIndex;
+  final TestMode mode;
+  Question(this.noteIndex, this.mode);
+}
+
 class _TestPageState extends State<TestPage> {
-  static const int _totalQuestions = 10;
+  // default test settings
+  TestMode _mode = TestMode.mixed;
+  int _totalQuestions = 100; // mixed default
   int _currentQuestion = 0;
-  late int _currentNoteIndex;
+  List<Question> _questions = [];
   int _score = 0;
   bool _testFinished = false;
   int? _selectedIndex;
@@ -529,22 +640,60 @@ class _TestPageState extends State<TestPage> {
   @override
   void initState() {
     super.initState();
-    _nextQuestion();
+    _prepareTest();
+  }
+
+  void _prepareTest() {
+    // set total based on mode
+    setState(() {
+      if (_mode == TestMode.mixed) {
+        _totalQuestions = 100;
+      } else {
+        _totalQuestions = 20;
+      }
+      _questions = List.generate(_totalQuestions, (_) {
+        // for mixed choose random mode per question
+        final mode = _mode == TestMode.mixed
+            ? TestMode.values[_random.nextInt(TestMode.values.length - 0)]
+            : _mode;
+        final noteIndex = _random.nextInt(notes.length);
+        return Question(noteIndex, mode);
+      });
+      _currentQuestion = 0;
+      _score = 0;
+      _testFinished = false;
+      _selectedIndex = null;
+      _feedback = null;
+    });
+    // Auto-play audio for audio-based questions after UI is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoPlayIfAudio();
+    });
+  }
+
+  void _autoPlayIfAudio() {
+    if (_questions.isEmpty || _currentQuestion >= _questions.length) return;
+    final q = _questions[_currentQuestion];
+    if (q.mode == TestMode.audioToNote) {
+      playNoteAssetByIndex(q.noteIndex);
+    }
   }
 
   void _nextQuestion() {
-    if (_currentQuestion >= _totalQuestions) {
+    if (_currentQuestion >= _questions.length) {
       setState(() {
         _testFinished = true;
       });
       return;
     }
     setState(() {
-      // Choose a random note for each question.
-      _currentNoteIndex = _random.nextInt(notes.length);
-      _currentQuestion++;
       _selectedIndex = null;
       _feedback = null;
+      _currentQuestion++;
+    });
+    // Auto-play for audio questions after advancing
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoPlayIfAudio();
     });
   }
 
@@ -552,7 +701,11 @@ class _TestPageState extends State<TestPage> {
     if (_selectedIndex != null) return; // already answered
     setState(() {
       _selectedIndex = index;
-      if (index == _currentNoteIndex) {
+      // play the tapped key sound for feedback
+      playNoteAssetByIndex(index);
+      final currentQ = _questions[_currentQuestion];
+      final correctIndex = currentQ.noteIndex;
+      if (index == correctIndex) {
         _score++;
         _feedback = 'Đúng!';
       } else {
@@ -570,7 +723,7 @@ class _TestPageState extends State<TestPage> {
       _score = 0;
       _testFinished = false;
     });
-    _nextQuestion();
+    _prepareTest();
   }
 
   @override
@@ -601,37 +754,44 @@ class _TestPageState extends State<TestPage> {
         ),
       );
     }
-
-    final note = notes[_currentNoteIndex];
+    final currentQ = _questions.isNotEmpty ? _questions[_currentQuestion] : Question(_random.nextInt(notes.length), TestMode.audioToNote);
+    
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Câu $_currentQuestion/$_totalQuestions',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
+            // Header with mode selector
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Kiểm tra:'),
+                const SizedBox(width: 8),
+                DropdownButton<TestMode>(
+                  value: _mode,
+                  items: const [
+                    DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
+                    DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
+                    DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
+                    DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _mode = v;
+                    });
+                    _prepareTest();
+                  },
+                ),
+                const SizedBox(width: 16),
+                Text('Câu ${_currentQuestion+1}/${_totalQuestions}'),
+              ],
             ),
+            const SizedBox(height: 16),
             const SizedBox(height: 24),
-            Text(
-              'Nhận dạng nốt:',
-              style: const TextStyle(fontSize: 18),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                note.solfege + ' (${note.international})',
-                style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 32),
-            PianoKeys(
-              highlightedIndex: _selectedIndex,
-              onKeyTapped: _handleAnswer,
-            ),
+            // Question area varies by question mode
+            Expanded(child: _buildQuestionArea(currentQ)),
             const SizedBox(height: 24),
             if (_feedback != null)
               Center(
@@ -649,4 +809,84 @@ class _TestPageState extends State<TestPage> {
       ),
     );
   }
+
+  Widget _buildQuestionArea(Question q) {
+    final note = notes[q.noteIndex];
+    switch (q.mode) {
+      case TestMode.audioToNote:
+        // Play button + multiple choice (international names)
+        final options = _makeOptions(q.noteIndex);
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Nghe và chọn nốt đúng', style: TextStyle(fontSize: 20)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => playNoteAssetByIndex(q.noteIndex),
+              icon: const Icon(Icons.volume_up),
+              label: const Text('Nghe nốt'),
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: List.generate(options.length, (i) {
+                final idx = options[i];
+                return ElevatedButton(
+                  onPressed: () => _handleAnswer(idx),
+                  child: Text(notes[idx].international),
+                );
+              }),
+            ),
+          ],
+        );
+      case TestMode.solfegeToIntl:
+        final options = _makeOptions(q.noteIndex);
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Chọn tên quốc tế cho: ${note.solfege}', style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: List.generate(options.length, (i) {
+                final idx = options[i];
+                return ElevatedButton(
+                  onPressed: () => _handleAnswer(idx),
+                  child: Text(notes[idx].international),
+                );
+              }),
+            ),
+          ],
+        );
+      case TestMode.intlToKey:
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Chọn phím tương ứng với: ${note.international}', style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 24),
+            PianoKeys(
+              highlightedIndex: _selectedIndex,
+              onKeyTapped: (i) => _handleAnswer(i),
+            ),
+          ],
+        );
+      case TestMode.mixed:
+        // Mixed delegates to its embedded mode (we set q.mode earlier)
+        return _buildQuestionArea(Question(q.noteIndex, TestMode.values[_random.nextInt(TestMode.values.length)]));
+    }
+  }
+
+  List<int> _makeOptions(int correct) {
+    // create 4 options including correct, shuffled
+    final set = <int>{correct};
+    while (set.length < 4) set.add(_random.nextInt(notes.length));
+    final list = set.toList()..shuffle(_random);
+    return list;
+  }
 }
+
+  
