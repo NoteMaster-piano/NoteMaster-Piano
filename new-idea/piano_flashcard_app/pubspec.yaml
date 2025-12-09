@@ -1,0 +1,27 @@
+name: piano_flashcard_app
+description: >
+  A simple Flutter web app providing flash cards to help memorize musical notes.
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Add any other packages here. Currently none are required.
+  audioplayers: ^6.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/audio/
