@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:intl/intl.dart';
 
 // Global audio player and helper to play note assets by index.
 final AudioPlayer _globalAudioPlayer = AudioPlayer();
@@ -59,6 +62,15 @@ class NoteFlashcardApp extends StatelessWidget {
         brightness: Brightness.light,
       ),
       home: const HomeScreen(),
+      onGenerateRoute: (settings) {
+        if (settings.name == '/leaderboard') {
+          return MaterialPageRoute(
+            builder: (context) => const LeaderboardPage(),
+            settings: settings,
+          );
+        }
+        return null;
+      },
     );
   }
 }
@@ -93,6 +105,11 @@ class _HomeScreenState extends State<HomeScreen> {
     
     return Scaffold(
       body: _pages[_selectedIndex],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.pushNamed(context, '/leaderboard'),
+        label: const Text('Bảng xếp hạng'),
+        icon: const Icon(Icons.emoji_events),
+      ),
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
               currentIndex: _selectedIndex,
@@ -142,6 +159,63 @@ class Note {
   final String solfege;
 
   const Note(this.international, this.solfege);
+}
+
+/// Test result with detailed scoring per category
+class TestResult {
+  final String playerName;
+  final int totalScore;
+  final int audioScore;
+  final int solfegeScore;
+  final int keyScore;
+  final DateTime timestamp;
+  final TestMode mode;
+
+  TestResult({
+    required this.playerName,
+    required this.totalScore,
+    required this.audioScore,
+    required this.solfegeScore,
+    required this.keyScore,
+    required this.timestamp,
+    required this.mode,
+  });
+
+  // Convert to JSON for storage
+  Map<String, dynamic> toJson() => {
+        'playerName': playerName,
+        'totalScore': totalScore,
+        'audioScore': audioScore,
+        'solfegeScore': solfegeScore,
+        'keyScore': keyScore,
+        'timestamp': timestamp.toIso8601String(),
+        'mode': mode.toString(),
+      };
+
+  // Create from JSON
+  factory TestResult.fromJson(Map<String, dynamic> json) => TestResult(
+        playerName: json['playerName'] as String,
+        totalScore: json['totalScore'] as int,
+        audioScore: json['audioScore'] as int,
+        solfegeScore: json['solfegeScore'] as int,
+        keyScore: json['keyScore'] as int,
+        timestamp: DateTime.parse(json['timestamp'] as String),
+        mode: TestMode.values
+            .firstWhere((e) => e.toString() == json['mode'] as String),
+      );
+}
+
+/// Leaderboard entry with rank
+class LeaderboardEntry {
+  final int rank;
+  final TestResult result;
+  final double accuracy;
+
+  LeaderboardEntry({
+    required this.rank,
+    required this.result,
+    required this.accuracy,
+  });
 }
 
 /// Static list of supported notes. The order follows ascending pitch from C to B.
@@ -730,15 +804,46 @@ class _TestPageState extends State<TestPage> {
   int _currentQuestion = 0;
   List<Question> _questions = [];
   int _score = 0;
+  int _audioScore = 0;
+  int _solfegeScore = 0;
+  int _keyScore = 0;
   bool _testFinished = false;
   int? _selectedIndex;
   String? _feedback;
   final Random _random = Random();
+  String _playerName = 'Guest';
+  late SharedPreferences _prefs;
 
   @override
   void initState() {
     super.initState();
+    _initPrefs();
     _prepareTest();
+  }
+
+  Future<void> _initPrefs() async {
+    _prefs = await SharedPreferences.getInstance();
+    final savedName = _prefs.getString('playerName') ?? 'Guest';
+    setState(() {
+      _playerName = savedName;
+    });
+  }
+
+  Future<void> _saveTestResult() async {
+    final result = TestResult(
+      playerName: _playerName,
+      totalScore: _score,
+      audioScore: _audioScore,
+      solfegeScore: _solfegeScore,
+      keyScore: _keyScore,
+      timestamp: DateTime.now(),
+      mode: _mode,
+    );
+
+    // Save to SharedPreferences
+    final resultsJson = _prefs.getStringList('testResults') ?? [];
+    resultsJson.add(jsonEncode(result.toJson()));
+    await _prefs.setStringList('testResults', resultsJson);
   }
 
   void _prepareTest() {
@@ -782,6 +887,8 @@ class _TestPageState extends State<TestPage> {
       setState(() {
         _testFinished = true;
       });
+      // Save result to leaderboard
+      _saveTestResult();
       return;
     }
     setState(() {
@@ -806,6 +913,21 @@ class _TestPageState extends State<TestPage> {
       if (index == correctIndex) {
         _score++;
         _feedback = 'Đúng!';
+        // Track score by category
+        switch (currentQ.mode) {
+          case TestMode.audioToNote:
+            _audioScore++;
+            break;
+          case TestMode.solfegeToIntl:
+            _solfegeScore++;
+            break;
+          case TestMode.intlToKey:
+            _keyScore++;
+            break;
+          case TestMode.mixed:
+            // For mixed, just increment total
+            break;
+        }
       } else {
         _feedback = 'Sai';
       }
@@ -819,6 +941,9 @@ class _TestPageState extends State<TestPage> {
     setState(() {
       _currentQuestion = 0;
       _score = 0;
+      _audioScore = 0;
+      _solfegeScore = 0;
+      _keyScore = 0;
       _testFinished = false;
     });
     _prepareTest();
@@ -832,30 +957,74 @@ class _TestPageState extends State<TestPage> {
     final titleFontSize = isMobile ? 24.0 : 28.0;
     
     if (_testFinished) {
+      final accuracy = (_score / _totalQuestions * 100).toStringAsFixed(1);
       return SafeArea(
         child: Padding(
           padding: EdgeInsets.all(horizontalPadding),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Hoàn thành kiểm tra!',
-                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: verticalPadding),
-                Text(
-                  'Điểm của bạn: $_score/$_totalQuestions',
-                  style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: verticalPadding),
-                FilledButton(
-                  onPressed: _restartTest,
-                  child: const Text('Làm lại'),
-                ),
-              ],
+          child: SingleChildScrollView(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '🎉 Hoàn thành kiểm tra!',
+                    style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: verticalPadding),
+                  Card(
+                    elevation: 4,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Tổng điểm',
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                          Text(
+                            '$_score/$_totalQuestions',
+                            style: TextStyle(fontSize: isMobile ? 32 : 48, fontWeight: FontWeight.bold, color: Colors.blue),
+                          ),
+                          Text(
+                            'Độ chính xác: $accuracy%',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: verticalPadding),
+                  if (_mode == TestMode.mixed || _audioScore > 0)
+                    _buildScoreCard('🎵 Nghe nhạc', _audioScore, 'Audio'),
+                  if (_mode == TestMode.mixed || _solfegeScore > 0)
+                    _buildScoreCard('🎼 Solfège', _solfegeScore, 'Solfège'),
+                  if (_mode == TestMode.mixed || _keyScore > 0)
+                    _buildScoreCard('⌨️ Phím', _keyScore, 'Keys'),
+                  SizedBox(height: verticalPadding),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _restartTest,
+                          child: const Text('Làm lại'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            // Navigate to leaderboard using named route
+                            Navigator.of(context).pushNamed('/leaderboard');
+                          },
+                          child: const Text('Xem Leaderboard'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -952,6 +1121,29 @@ class _TestPageState extends State<TestPage> {
     );
   }
 
+  Widget _buildScoreCard(String title, int score, String category) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            Text(
+              '$score',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuestionArea(Question q, bool isMobile) {
     final note = notes[q.noteIndex];
     switch (q.mode) {
@@ -1034,4 +1226,250 @@ class _TestPageState extends State<TestPage> {
   }
 }
 
+/// Leaderboard page to show top players
+class LeaderboardPage extends StatefulWidget {
+  const LeaderboardPage({super.key});
+
+  @override
+  State<LeaderboardPage> createState() => _LeaderboardPageState();
+}
+
+class _LeaderboardPageState extends State<LeaderboardPage> {
+  late SharedPreferences _prefs;
+  List<TestResult> _allResults = [];
+  List<LeaderboardEntry> _leaderboard = [];
+  TestMode? _filterMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLeaderboard();
+  }
+
+  Future<void> _loadLeaderboard() async {
+    _prefs = await SharedPreferences.getInstance();
+    final resultsJson = _prefs.getStringList('testResults') ?? [];
+    
+    final results = <TestResult>[];
+    for (final json in resultsJson) {
+      try {
+        results.add(TestResult.fromJson(jsonDecode(json) as Map<String, dynamic>));
+      } catch (e) {
+        print('Error parsing result: $e');
+      }
+    }
+
+    // Sort by score descending
+    results.sort((a, b) => b.totalScore.compareTo(a.totalScore));
+
+    // Create leaderboard entries
+    final leaderboard = <LeaderboardEntry>[];
+    for (int i = 0; i < results.length; i++) {
+      final accuracy = (results[i].totalScore / 20 * 100); // Assuming 20 questions per non-mixed test
+      leaderboard.add(LeaderboardEntry(
+        rank: i + 1,
+        result: results[i],
+        accuracy: accuracy,
+      ));
+    }
+
+    setState(() {
+      _allResults = results;
+      _leaderboard = leaderboard;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final titleFontSize = isMobile ? 24.0 : 28.0;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(horizontalPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '🏆 Bảng Xếp Hạng',
+                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            SizedBox(height: verticalPadding),
+            // Filter buttons
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  FilterChip(
+                    label: const Text('Tất cả'),
+                    selected: _filterMode == null,
+                    onSelected: (_) {
+                      setState(() => _filterMode = null);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('🎵 Nghe'),
+                    selected: _filterMode == TestMode.audioToNote,
+                    onSelected: (_) {
+                      setState(() => _filterMode = TestMode.audioToNote);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('🎼 Solfège'),
+                    selected: _filterMode == TestMode.solfegeToIntl,
+                    onSelected: (_) {
+                      setState(() => _filterMode = TestMode.solfegeToIntl);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('⌨️ Phím'),
+                    selected: _filterMode == TestMode.intlToKey,
+                    onSelected: (_) {
+                      setState(() => _filterMode = TestMode.intlToKey);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: verticalPadding),
+            // Leaderboard list
+            Expanded(
+              child: _leaderboard.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Chưa có kết quả nào',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _leaderboard.length,
+                      itemBuilder: (context, index) {
+                        final entry = _leaderboard[index];
+                        
+                        // Apply filter
+                        if (_filterMode != null && entry.result.mode != _filterMode) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final medal = entry.rank == 1
+                            ? '🥇'
+                            : entry.rank == 2
+                                ? '🥈'
+                                : entry.rank == 3
+                                    ? '🥉'
+                                    : '';
+                        final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+                        final formattedDate = dateFormat.format(entry.result.timestamp);
+
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          elevation: entry.rank <= 3 ? 4 : 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '$medal #${entry.rank} ${entry.result.playerName}',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: entry.rank <= 3 ? Colors.blue : Colors.black,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${entry.result.totalScore} điểm',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      formattedDate,
+                                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                                    ),
+                                    Text(
+                                      '${(entry.accuracy).toStringAsFixed(1)}%',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: entry.accuracy >= 80 ? Colors.green : Colors.orange,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (entry.result.mode != TestMode.mixed)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Text(
+                                      _getModeLabel(entry.result.mode),
+                                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    ),
+                                  ),
+                                if (entry.result.mode == TestMode.mixed)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Text('🎵: ${entry.result.audioScore}  ', style: const TextStyle(fontSize: 11)),
+                                        Text('🎼: ${entry.result.solfegeScore}  ', style: const TextStyle(fontSize: 11)),
+                                        Text('⌨️: ${entry.result.keyScore}', style: const TextStyle(fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getModeLabel(TestMode mode) {
+    switch (mode) {
+      case TestMode.audioToNote:
+        return '🎵 Nghe nhạc → Chọn nốt';
+      case TestMode.solfegeToIntl:
+        return '🎼 Solfège → Quốc tế';
+      case TestMode.intlToKey:
+        return '⌨️ Quốc tế → Phím piano';
+      case TestMode.mixed:
+        return 'Trộn lẫn';
+    }
+  }
+}
+
+  
   
