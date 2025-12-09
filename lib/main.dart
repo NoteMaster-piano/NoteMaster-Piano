@@ -89,27 +89,49 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    
     return Scaffold(
       body: _pages[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.school_outlined),
-            label: 'Học nốt',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.piano),
-            label: 'Match phím',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.quiz_outlined),
-            label: 'Test',
-          ),
-        ],
-      ),
+      bottomNavigationBar: isMobile
+          ? BottomNavigationBar(
+              currentIndex: _selectedIndex,
+              onTap: _onItemTapped,
+              selectedItemColor: Theme.of(context).colorScheme.primary,
+              unselectedItemColor: Colors.grey,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.school_outlined),
+                  label: 'Học nốt',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.piano),
+                  label: 'Match',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.quiz_outlined),
+                  label: 'Test',
+                ),
+              ],
+            )
+          : NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.school_outlined),
+                  label: 'Học nốt nhạc',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.piano),
+                  label: 'Match nốt với phím',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.quiz_outlined),
+                  label: 'Kiểm tra',
+                ),
+              ],
+            ),
     );
   }
 }
@@ -237,135 +259,193 @@ class _LearnPageState extends State<LearnPage> {
   @override
   Widget build(BuildContext context) {
     final currentNote = notes[_currentIndex];
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final cardFontSize = isMobile ? 48.0 : 64.0;
+    final titleFontSize = isMobile ? 24.0 : 28.0;
+
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
-                child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Học nốt nhạc',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            // Flashcard container
-            Expanded(
-              child: GestureDetector(
-                onTap: _listenMode ? null : _toggleAnswer,
-                child: Card(
-                  elevation: 4,
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, animation) {
-                        return ScaleTransition(scale: animation, child: child);
-                      },
-                      child: _showAnswer
-                          ? Text(
-                              currentNote.solfege,
-                              key: ValueKey<bool>(_showAnswer),
-                              style: const TextStyle(
-                                fontSize: 64,
-                                fontWeight: FontWeight.bold,
+        padding: EdgeInsets.all(horizontalPadding),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Học nốt nhạc',
+                style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: verticalPadding),
+              // Flashcard container
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: isMobile ? 200 : 250),
+                child: GestureDetector(
+                  onTap: _listenMode ? null : _toggleAnswer,
+                  child: Card(
+                    elevation: 4,
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        transitionBuilder: (child, animation) {
+                          return ScaleTransition(scale: animation, child: child);
+                        },
+                        child: _showAnswer
+                            ? Text(
+                                currentNote.solfege,
+                                key: ValueKey<bool>(_showAnswer),
+                                style: TextStyle(
+                                  fontSize: cardFontSize,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : Text(
+                                currentNote.international,
+                                key: ValueKey<bool>(_showAnswer),
+                                style: TextStyle(
+                                  fontSize: cardFontSize,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            )
-                          : Text(
-                              currentNote.international,
-                              key: ValueKey<bool>(_showAnswer),
-                              style: const TextStyle(
-                                fontSize: 64,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            // Instruction and control buttons
-            Text(
-              'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
-              style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _toggleAnswer,
-                  icon: const Icon(Icons.flip),
-                  label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
-                ),
-                const SizedBox(width: 16),
-                FilledButton.icon(
-                  onPressed: _nextCard,
-                  icon: const Icon(Icons.navigate_next),
-                  label: const Text('Tiếp theo'),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: _isPlaying ? null : _playCurrentNote,
-                  icon: const Icon(Icons.volume_up),
-                  label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: _listenMode ? _stopListenMode : _startListenMode,
-                  icon: const Icon(Icons.hearing),
-                  label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // If in listen-and-choose mode, show choices
-            if (_listenMode) ...[
-              const SizedBox(height: 16),
-              Center(
-                child: FilledButton.icon(
-                  onPressed: () => playNoteAssetByIndex(_currentIndex),
-                  icon: const Icon(Icons.volume_up),
-                  label: const Text('Nghe nốt'),
-                ),
+              SizedBox(height: verticalPadding),
+              // Instruction and control buttons
+              Text(
+                'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
+                style: TextStyle(fontSize: isMobile ? 14 : 16),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: List.generate(_learnOptions.length, (i) {
-                  final idx = _learnOptions[i];
-                  return ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        if (idx == _currentIndex) {
-                          _learnFeedback = 'Đúng!';
-                        } else {
-                          _learnFeedback = 'Sai';
-                        }
-                        // play selection sound
-                        playNoteAssetByIndex(idx);
-                      });
-                    },
-                    child: Text(notes[idx].international),
-                  );
-                }),
-              ),
-              if (_learnFeedback != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12.0),
-                  child: Center(
-                    child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+              SizedBox(height: verticalPadding),
+              // Responsive button layout
+              if (isMobile)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _toggleAnswer,
+                            icon: const Icon(Icons.flip),
+                            label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _nextCard,
+                            icon: const Icon(Icons.navigate_next),
+                            label: const Text('Tiếp theo'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _isPlaying ? null : _playCurrentNote,
+                            icon: const Icon(Icons.volume_up),
+                            label: Text(_isPlaying ? 'Phát...' : 'Nghe'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _listenMode ? _stopListenMode : _startListenMode,
+                            icon: const Icon(Icons.hearing),
+                            label: Text(_listenMode ? 'Thoát' : 'Nghe & Chọn'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _toggleAnswer,
+                      icon: const Icon(Icons.flip),
+                      label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                    ),
+                    const SizedBox(width: 16),
+                    FilledButton.icon(
+                      onPressed: _nextCard,
+                      icon: const Icon(Icons.navigate_next),
+                      label: const Text('Tiếp theo'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _isPlaying ? null : _playCurrentNote,
+                      icon: const Icon(Icons.volume_up),
+                      label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _listenMode ? _stopListenMode : _startListenMode,
+                      icon: const Icon(Icons.hearing),
+                      label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
+                    ),
+                  ],
+                ),
+              SizedBox(height: verticalPadding),
+              // If in listen-and-choose mode, show choices
+              if (_listenMode) ...[
+                SizedBox(height: verticalPadding),
+                Center(
+                  child: FilledButton.icon(
+                    onPressed: () => playNoteAssetByIndex(_currentIndex),
+                    icon: const Icon(Icons.volume_up),
+                    label: const Text('Nghe nốt'),
                   ),
                 ),
+                SizedBox(height: verticalPadding),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: List.generate(_learnOptions.length, (i) {
+                    final idx = _learnOptions[i];
+                    return ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          if (idx == _currentIndex) {
+                            _learnFeedback = 'Đúng!';
+                          } else {
+                            _learnFeedback = 'Sai';
+                          }
+                          // play selection sound
+                          playNoteAssetByIndex(idx);
+                        });
+                      },
+                      child: Text(notes[idx].international),
+                    );
+                  }),
+                ),
+                if (_learnFeedback != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12.0),
+                    child: Center(
+                      child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+                    ),
+                  ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -430,6 +510,10 @@ class _PianoKeysState extends State<PianoKeys> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final keyHeight = isMobile ? 100.0 : 120.0;
+    final fontSize = isMobile ? 8.0 : 10.0;
+    
     return KeyboardListener(
       focusNode: _focusNode,
       onKeyEvent: _handleKey,
@@ -437,7 +521,7 @@ class _PianoKeysState extends State<PianoKeys> {
         builder: (context, constraints) {
           final whiteKeyWidth = constraints.maxWidth / notes.length;
           return SizedBox(
-            height: 120,
+            height: keyHeight,
             child: Stack(
               children: [
                 // White keys
@@ -450,7 +534,7 @@ class _PianoKeysState extends State<PianoKeys> {
                       child: Container(
                         width: whiteKeyWidth - 4,
                         margin: const EdgeInsets.symmetric(horizontal: 2),
-                        height: 120,
+                        height: keyHeight,
                         alignment: Alignment.bottomCenter,
                         decoration: BoxDecoration(
                           color: isHighlighted ? Theme.of(context).colorScheme.primaryContainer : Colors.white,
@@ -463,7 +547,7 @@ class _PianoKeysState extends State<PianoKeys> {
                             alignment: Alignment.bottomRight,
                             child: Text(
                               _qwertyLabels[index],
-                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              style: TextStyle(fontSize: fontSize, color: Colors.grey),
                             ),
                           ),
                         ),
@@ -486,7 +570,7 @@ class _PianoKeysState extends State<PianoKeys> {
                         child: Container(
                           width: (whiteKeyWidth - 8) / 2,
                           margin: EdgeInsets.only(left: whiteKeyWidth / 2 - ((whiteKeyWidth - 8) / 4)),
-                          height: 80,
+                          height: keyHeight * 0.67,
                           decoration: BoxDecoration(
                             color: widget.highlightedIndex == index ? Colors.grey[800] : Colors.black,
                             borderRadius: BorderRadius.circular(4),
@@ -558,51 +642,59 @@ class _MatchPageState extends State<MatchPage> {
   @override
   Widget build(BuildContext context) {
     final note = notes[_currentNoteIndex];
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final titleFontSize = isMobile ? 24.0 : 28.0;
+    final noteFontSize = isMobile ? 36.0 : 48.0;
+    
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Match nốt với phím',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            // Display the note to match
-            Text(
-              'Hãy chọn phím tương ứng với nốt:',
-              style: const TextStyle(fontSize: 18),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                '${note.solfege}/${note.international}',
-                style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+        padding: EdgeInsets.all(horizontalPadding),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Match nốt với phím',
+                style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 32),
-            PianoKeys(
-              highlightedIndex: _selectedIndex,
-              onKeyTapped: _handleKeyTap,
-            ),
-            const SizedBox(height: 24),
-            if (_feedback != null)
+              SizedBox(height: verticalPadding),
+              // Display the note to match
+              Text(
+                'Hãy chọn phím tương ứng với nốt:',
+                style: TextStyle(fontSize: isMobile ? 16 : 18),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
               Center(
                 child: Text(
-                  _feedback!,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _feedback == 'Chính xác!'
-                        ? Colors.green
-                        : Colors.red,
-                  ),
+                  '${note.solfege}/${note.international}',
+                  style: TextStyle(fontSize: noteFontSize, fontWeight: FontWeight.bold),
                 ),
               ),
-          ],
+              SizedBox(height: verticalPadding * 1.5),
+              PianoKeys(
+                highlightedIndex: _selectedIndex,
+                onKeyTapped: _handleKeyTap,
+              ),
+              SizedBox(height: verticalPadding),
+              if (_feedback != null)
+                Center(
+                  child: Text(
+                    _feedback!,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _feedback == 'Chính xác!'
+                          ? Colors.green
+                          : Colors.red,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -728,28 +820,37 @@ class _TestPageState extends State<TestPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final titleFontSize = isMobile ? 24.0 : 28.0;
+    
     if (_testFinished) {
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Hoàn thành kiểm tra!',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Điểm của bạn: $_score/$_totalQuestions',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _restartTest,
-                child: const Text('Làm lại'),
-              ),
-            ],
+          padding: EdgeInsets.all(horizontalPadding),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Hoàn thành kiểm tra!',
+                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: verticalPadding),
+                Text(
+                  'Điểm của bạn: $_score/$_totalQuestions',
+                  style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: verticalPadding),
+                FilledButton(
+                  onPressed: _restartTest,
+                  child: const Text('Làm lại'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -758,59 +859,94 @@ class _TestPageState extends State<TestPage> {
     
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header with mode selector
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Kiểm tra:'),
-                const SizedBox(width: 8),
-                DropdownButton<TestMode>(
-                  value: _mode,
-                  items: const [
-                    DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
-                    DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
-                    DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
-                    DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _mode = v;
-                    });
-                    _prepareTest();
-                  },
-                ),
-                const SizedBox(width: 16),
-                Text('Câu ${_currentQuestion+1}/${_totalQuestions}'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const SizedBox(height: 24),
-            // Question area varies by question mode
-            Expanded(child: _buildQuestionArea(currentQ)),
-            const SizedBox(height: 24),
-            if (_feedback != null)
-              Center(
-                child: Text(
-                  _feedback!,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _feedback == 'Đúng!' ? Colors.green : Colors.red,
+        padding: EdgeInsets.all(horizontalPadding),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header with mode selector
+              isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text('Kiểm tra:'),
+                        SizedBox(height: verticalPadding),
+                        DropdownButton<TestMode>(
+                          isExpanded: true,
+                          value: _mode,
+                          items: const [
+                            DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
+                            DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
+                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
+                            DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _mode = v;
+                            });
+                            _prepareTest();
+                          },
+                        ),
+                        SizedBox(height: verticalPadding),
+                        Center(
+                          child: Text('Câu ${_currentQuestion + 1}/$_totalQuestions',
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Kiểm tra:'),
+                        const SizedBox(width: 8),
+                        DropdownButton<TestMode>(
+                          value: _mode,
+                          items: const [
+                            DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
+                            DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
+                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
+                            DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
+                          ],
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() {
+                              _mode = v;
+                            });
+                            _prepareTest();
+                          },
+                        ),
+                        const SizedBox(width: 16),
+                        Text('Câu ${_currentQuestion + 1}/$_totalQuestions'),
+                      ],
+                    ),
+              SizedBox(height: verticalPadding),
+              SizedBox(height: verticalPadding),
+              // Question area varies by question mode
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: isMobile ? 200 : 250),
+                child: _buildQuestionArea(currentQ, isMobile),
+              ),
+              SizedBox(height: verticalPadding),
+              if (_feedback != null)
+                Center(
+                  child: Text(
+                    _feedback!,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _feedback == 'Đúng!' ? Colors.green : Colors.red,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildQuestionArea(Question q) {
+  Widget _buildQuestionArea(Question q, bool isMobile) {
     final note = notes[q.noteIndex];
     switch (q.mode) {
       case TestMode.audioToNote:
@@ -819,17 +955,18 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Nghe và chọn nốt đúng', style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 16),
+            Text('Nghe và chọn nốt đúng', 
+                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+            SizedBox(height: isMobile ? 12 : 16),
             FilledButton.icon(
               onPressed: () => playNoteAssetByIndex(q.noteIndex),
               icon: const Icon(Icons.volume_up),
               label: const Text('Nghe nốt'),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: isMobile ? 16 : 24),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: isMobile ? 8 : 12,
+              runSpacing: isMobile ? 8 : 12,
               alignment: WrapAlignment.center,
               children: List.generate(options.length, (i) {
                 final idx = options[i];
@@ -846,11 +983,12 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Chọn tên quốc tế cho: ${note.solfege}', style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 24),
+            Text('Chọn tên quốc tế cho: ${note.solfege}', 
+                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+            SizedBox(height: isMobile ? 16 : 24),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: isMobile ? 8 : 12,
+              runSpacing: isMobile ? 8 : 12,
               alignment: WrapAlignment.center,
               children: List.generate(options.length, (i) {
                 final idx = options[i];
@@ -866,8 +1004,9 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Chọn phím tương ứng với: ${note.international}', style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 24),
+            Text('Chọn phím tương ứng với: ${note.international}', 
+                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+            SizedBox(height: isMobile ? 16 : 24),
             PianoKeys(
               highlightedIndex: _selectedIndex,
               onKeyTapped: (i) => _handleAnswer(i),
@@ -876,7 +1015,7 @@ class _TestPageState extends State<TestPage> {
         );
       case TestMode.mixed:
         // Mixed delegates to its embedded mode (we set q.mode earlier)
-        return _buildQuestionArea(Question(q.noteIndex, TestMode.values[_random.nextInt(TestMode.values.length)]));
+        return _buildQuestionArea(Question(q.noteIndex, TestMode.values[_random.nextInt(TestMode.values.length)]), isMobile);
     }
   }
 
