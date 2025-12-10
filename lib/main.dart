@@ -173,6 +173,7 @@ class TestResult {
   final int audioScore;
   final int solfegeScore;
   final int keyScore;
+  final int staffScore;
   final DateTime timestamp;
   final TestMode mode;
 
@@ -182,6 +183,7 @@ class TestResult {
     required this.audioScore,
     required this.solfegeScore,
     required this.keyScore,
+  required this.staffScore,
     required this.timestamp,
     required this.mode,
   });
@@ -193,6 +195,7 @@ class TestResult {
         'audioScore': audioScore,
         'solfegeScore': solfegeScore,
         'keyScore': keyScore,
+    'staffScore': staffScore,
         'timestamp': timestamp.toIso8601String(),
         'mode': mode.toString(),
       };
@@ -204,6 +207,7 @@ class TestResult {
         audioScore: json['audioScore'] as int,
         solfegeScore: json['solfegeScore'] as int,
         keyScore: json['keyScore'] as int,
+    staffScore: (json['staffScore'] as int?) ?? 0,
         timestamp: DateTime.parse(json['timestamp'] as String),
         mode: TestMode.values
             .firstWhere((e) => e.toString() == json['mode'] as String),
@@ -358,7 +362,8 @@ class StaffPainter extends CustomPainter {
     const lineCount = 5;
     // Compute line spacing so the 5 lines fit between top and bottom padding
     final usableHeight = availableHeight - (verticalPadding * 2);
-    final lineSpacing = usableHeight / (lineCount - 1);
+    // Scale staff down by 0.75 (25% smaller) to fit better in card on all screen sizes
+    final lineSpacing = (usableHeight / (lineCount - 1)) * 0.75;
 
     // Draw staff lines (5 horizontal lines)
     for (int i = 0; i < lineCount; i++) {
@@ -606,11 +611,19 @@ class _LearnPageState extends State<LearnPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Expanded(
-                              child: MusicalStaff(
-                                noteIndex: _currentIndex,
+                            if (isMobile)
+                              SizedBox(
+                                height: cardHeight * 0.7,
+                                child: MusicalStaff(
+                                  noteIndex: _currentIndex,
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: MusicalStaff(
+                                  noteIndex: _currentIndex,
+                                ),
                               ),
-                            ),
                             if (_showAnswer)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
@@ -1061,7 +1074,7 @@ class TestPage extends StatefulWidget {
   State<TestPage> createState() => _TestPageState();
 }
 
-enum TestMode { mixed, audioToNote, solfegeToIntl, intlToKey }
+enum TestMode { mixed, audioToNote, solfegeToIntl, intlToKey, staffNotation }
 
 class Question {
   final int noteIndex;
@@ -1079,6 +1092,7 @@ class _TestPageState extends State<TestPage> {
   int _audioScore = 0;
   int _solfegeScore = 0;
   int _keyScore = 0;
+  int _staffScore = 0;
   bool _testFinished = false;
   int? _selectedIndex;
   String? _feedback;
@@ -1161,6 +1175,7 @@ class _TestPageState extends State<TestPage> {
       audioScore: _audioScore,
       solfegeScore: _solfegeScore,
       keyScore: _keyScore,
+      staffScore: _staffScore,
       timestamp: DateTime.now(),
       mode: _mode,
     );
@@ -1192,6 +1207,10 @@ class _TestPageState extends State<TestPage> {
       _testFinished = false;
       _selectedIndex = null;
       _feedback = null;
+        _audioScore = 0;
+        _solfegeScore = 0;
+        _keyScore = 0;
+        _staffScore = 0;
     });
     // Auto-play audio for audio-based questions after UI is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1248,6 +1267,9 @@ class _TestPageState extends State<TestPage> {
             break;
           case TestMode.intlToKey:
             _keyScore++;
+            break;
+          case TestMode.staffNotation:
+            _staffScore++;
             break;
           case TestMode.mixed:
             // For mixed, just increment total
@@ -1391,6 +1413,7 @@ class _TestPageState extends State<TestPage> {
                             DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
                             DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
                             DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
+                    DropdownMenuItem(value: TestMode.staffNotation, child: Text('Khuông nhạc -> Nốt')),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
@@ -1419,6 +1442,7 @@ class _TestPageState extends State<TestPage> {
                             DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
                             DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
                             DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
+                            DropdownMenuItem(value: TestMode.staffNotation, child: Text('Khuông nhạc -> Nốt')),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
@@ -1548,6 +1572,50 @@ class _TestPageState extends State<TestPage> {
             ),
           ],
         );
+      case TestMode.staffNotation:
+        final options = _makeOptions(q.noteIndex);
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Đọc nốt từ khuông nhạc', 
+                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+            SizedBox(height: isMobile ? 12 : 16),
+            if (isMobile)
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.35 * 0.7,
+                child: MusicalStaff(
+                  noteIndex: q.noteIndex,
+                  initiallyShowNoteLabel: false,
+                ),
+              )
+            else
+              // Use a fixed, slightly smaller height for desktop/large screens
+              // to keep the staff compact. Reduced to 70% (≈30% smaller).
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.35 * 0.7,
+                child: MusicalStaff(
+                  noteIndex: q.noteIndex,
+                  initiallyShowNoteLabel: false,
+                ),
+              ),
+            SizedBox(height: isMobile ? 12 : 16),
+            Text('Chọn tên nốt đúng', 
+                style: TextStyle(fontSize: isMobile ? 14 : 16, fontStyle: FontStyle.italic)),
+            SizedBox(height: isMobile ? 8 : 12),
+            Wrap(
+              spacing: isMobile ? 6 : 10,
+              runSpacing: isMobile ? 6 : 10,
+              alignment: WrapAlignment.center,
+              children: List.generate(options.length, (i) {
+                final idx = options[i];
+                return ElevatedButton(
+                  onPressed: () => _handleAnswer(idx),
+                  child: Text(notes[idx].international),
+                );
+              }),
+            ),
+          ],
+        );
       case TestMode.mixed:
         // Mixed delegates to its embedded mode (we set q.mode earlier)
         return _buildQuestionArea(Question(q.noteIndex, TestMode.values[_random.nextInt(TestMode.values.length)]), isMobile);
@@ -1672,6 +1740,14 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                         setState(() => _filterMode = TestMode.intlToKey);
                       },
                     ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('🎼 Khuông nhạc'),
+                      selected: _filterMode == TestMode.staffNotation,
+                      onSelected: (_) {
+                        setState(() => _filterMode = TestMode.staffNotation);
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -1770,7 +1846,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                                         children: [
                                           Text('🎵: ${entry.result.audioScore}  ', style: const TextStyle(fontSize: 11)),
                                           Text('🎼: ${entry.result.solfegeScore}  ', style: const TextStyle(fontSize: 11)),
-                                          Text('⌨️: ${entry.result.keyScore}', style: const TextStyle(fontSize: 11)),
+                                          Text('⌨️: ${entry.result.keyScore}  ', style: const TextStyle(fontSize: 11)),
+                                          Text('🎶: ${entry.result.staffScore}', style: const TextStyle(fontSize: 11)),
                                         ],
                                       ),
                                     ),
@@ -1796,6 +1873,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
         return '🎼 Solfège → Quốc tế';
       case TestMode.intlToKey:
         return '⌨️ Quốc tế → Phím piano';
+      case TestMode.staffNotation:
+        return '🎶 Đọc khuông nhạc → Chọn nốt';
       case TestMode.mixed:
         return 'Trộn lẫn';
     }
