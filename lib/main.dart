@@ -97,6 +97,24 @@ class NoteFlashcardApp extends StatelessWidget {
             settings: settings,
           );
         }
+        if (settings.name == '/about') {
+          return MaterialPageRoute(
+            builder: (context) => const AboutPage(),
+            settings: settings,
+          );
+        }
+        if (settings.name == '/contact') {
+          return MaterialPageRoute(
+            builder: (context) => const ContactPage(),
+            settings: settings,
+          );
+        }
+        if (settings.name == '/privacy') {
+          return MaterialPageRoute(
+            builder: (context) => const PrivacyPolicyPage(),
+            settings: settings,
+          );
+        }
         return null;
       },
     );
@@ -131,16 +149,67 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 768;
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 900;
+    final isDesktop = screenWidth >= 900;
+
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: toggleLocale,
-        icon: const Icon(Icons.language),
-        label: Text(gLocaleNotifier.value == 'vi' ? 'VI' : 'EN'),
-        tooltip: t('Chuyển sang English', 'Switch to Vietnamese'),
+      appBar: AppBar(
+        title: Text(t('Piano Flashcards', 'Piano Flashcards')),
+        centerTitle: isMobile,
+        actions: [
+          // Language toggle button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Center(
+              child: ElevatedButton.icon(
+                onPressed: toggleLocale,
+                icon: const Icon(Icons.language, size: 20),
+                label: Text(gLocaleNotifier.value == 'vi' ? 'VI' : 'EN'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+              ),
+            ),
+          ),
+          // Menu button for desktop (opens modal or shows menu)
+          if (isDesktop)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Center(
+                child: IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showDesktopMenu(context),
+                  tooltip: t('Thêm tùy chọn', 'More options'),
+                ),
+              ),
+            ),
+        ],
       ),
-      body: _pages[_selectedIndex],
+      drawer: isMobile || isTablet ? _buildDrawer(context) : null,
+      body: isDesktop
+          ? Row(
+              children: [
+                // Sidebar for desktop
+                Container(
+                  width: 280,
+                  color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.1),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _buildDesktopSidebar(context),
+                      ),
+                    ],
+                  ),
+                ),
+                // Main content
+                Expanded(
+                  child: _pages[_selectedIndex],
+                ),
+              ],
+            )
+          : _pages[_selectedIndex],
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
               currentIndex: _selectedIndex,
@@ -170,32 +239,270 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             )
-          : NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _onItemTapped,
-              destinations: [
-                NavigationDestination(
-                  icon: Icon(Icons.school_outlined),
-                  label: t('Học nốt nhạc', 'Learn'),
+          : isTablet
+              ? BottomNavigationBar(
+                  currentIndex: _selectedIndex,
+                  onTap: _onItemTapped,
+                  selectedItemColor: Theme.of(context).colorScheme.primary,
+                  unselectedItemColor: Colors.grey,
+                  type: BottomNavigationBarType.fixed,
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.school_outlined),
+                      label: t('Học nốt', 'Learn'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.piano),
+                      label: t('Match', 'Match'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.quiz_outlined),
+                      label: t('Test', 'Test'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.trending_up),
+                      label: t('Tiến bộ', 'Progress'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.emoji_events),
+                      label: t('Xếp hạng', 'Leaderboard'),
+                    ),
+                  ],
+                )
+              : null,
+    );
+  }
+
+  Widget _buildDesktopSidebar(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // App header
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.piano,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.piano),
-                  label: t('Match nốt với phím', 'Match'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.quiz_outlined),
-                  label: t('Kiểm tra', 'Test'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.trending_up),
-                  label: t('Tiến bộ', 'Progress'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.emoji_events),
-                  label: t('Bảng xếp hạng', 'Leaderboard'),
+                const SizedBox(height: 12),
+                Text(
+                  t('Piano Flashcards', 'Piano Flashcards'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
+          ),
+          const Divider(),
+          
+          // Navigation items
+          _buildSidebarNavItem(
+            context,
+            Icons.school_outlined,
+            t('Học nốt', 'Learn'),
+            0,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.piano,
+            t('Match', 'Match'),
+            1,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.quiz_outlined,
+            t('Test', 'Test'),
+            2,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.trending_up,
+            t('Tiến bộ', 'Progress'),
+            3,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.emoji_events,
+            t('Xếp hạng', 'Leaderboard'),
+            4,
+          ),
+          
+          const Divider(),
+          
+          // Menu items
+          ListTile(
+            leading: const Icon(Icons.info),
+            title: Text(t('Về ứng dụng', 'About')),
+            onTap: () => Navigator.pushNamed(context, '/about'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+          ListTile(
+            leading: const Icon(Icons.email),
+            title: Text(t('Liên hệ', 'Contact')),
+            onTap: () => Navigator.pushNamed(context, '/contact'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip),
+            title: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+            onTap: () => Navigator.pushNamed(context, '/privacy'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarNavItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    int index,
+  ) {
+    final isSelected = _selectedIndex == index;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      selected: isSelected,
+      selectedColor: Theme.of(context).colorScheme.primary,
+      selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+      onTap: () => setState(() => _selectedIndex = index),
+    );
+  }
+
+  void _showDesktopMenu(BuildContext context) {
+    showMenu(
+      context: context,
+      position: const RelativeRect.fromLTRB(1000, 50, 0, 0),
+      items: [
+        PopupMenuItem(
+          child: Text(t('Về ứng dụng', 'About')),
+          onTap: () => Navigator.pushNamed(context, '/about'),
+        ),
+        PopupMenuItem(
+          child: Text(t('Liên hệ', 'Contact')),
+          onTap: () => Navigator.pushNamed(context, '/contact'),
+        ),
+        PopupMenuItem(
+          child: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+          onTap: () => Navigator.pushNamed(context, '/privacy'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(
+                  Icons.piano,
+                  size: 48,
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  t('Piano Flashcards', 'Piano Flashcards'),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Main navigation
+          ListTile(
+            leading: const Icon(Icons.school_outlined),
+            title: Text(t('Học nốt', 'Learn')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 0);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.piano),
+            title: Text(t('Match', 'Match')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 1);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.quiz_outlined),
+            title: Text(t('Test', 'Test')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 2);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.trending_up),
+            title: Text(t('Tiến bộ', 'Progress')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 3);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.emoji_events),
+            title: Text(t('Xếp hạng', 'Leaderboard')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 4);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.info),
+            title: Text(t('Về ứng dụng', 'About')),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/about');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.email),
+            title: Text(t('Liên hệ', 'Contact')),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/contact');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.privacy_tip),
+            title: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/privacy');
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.exit_to_app),
+            title: Text(t('Thoát', 'Exit')),
+            onTap: () {
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2513,6 +2820,524 @@ class _ProgressPageState extends State<ProgressPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// About Page: displays app information, version, and team details.
+class AboutPage extends StatelessWidget {
+  const AboutPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(t('Về ứng dụng', 'About')),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // App logo / icon
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.piano,
+                size: 60,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // App name
+            Text(
+              t('Piano Flashcards', 'Piano Flashcards'),
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            
+            // Version
+            Text(
+              t('Phiên bản 1.0.0', 'Version 1.0.0'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Description section
+            Text(
+              t('Về ứng dụng', 'About this app'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            
+            Text(
+              t(
+                'Piano Flashcards là một ứng dụng học nhạc tương tác được thiết kế để giúp người học ghi nhớ các nốt nhạc trên đàn piano. Với ba chế độ học khác nhau - Học, Match và Test - người dùng có thể nâng cao kỹ năng nhạc lý và nhận dạng nốt nhạc theo cách vui vẻ và hiệu quả.',
+                'Piano Flashcards is an interactive music learning app designed to help learners memorize musical notes on a piano. With three different learning modes - Learn, Match, and Test - users can improve their music theory skills and note recognition abilities in a fun and effective way.',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            
+            // Features section
+            Text(
+              t('Các tính năng', 'Features'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            
+            _buildFeatureItem(
+              context,
+              Icons.school,
+              t('Chế độ Học', 'Learn Mode'),
+              t('Học các nốt nhạc với thẻ ghi chú tương tác', 'Learn notes with interactive flashcards'),
+            ),
+            const SizedBox(height: 12),
+            
+            _buildFeatureItem(
+              context,
+              Icons.piano,
+              t('Chế độ Match', 'Match Mode'),
+              t('Kết hợp nốt nhạc với các phím đàn piano', 'Match notes with piano keys'),
+            ),
+            const SizedBox(height: 12),
+            
+            _buildFeatureItem(
+              context,
+              Icons.quiz,
+              t('Chế độ Test', 'Test Mode'),
+              t('Kiểm tra kiến thức và theo dõi tiến độ', 'Test knowledge and track progress'),
+            ),
+            const SizedBox(height: 24),
+            
+            // Team section
+            Text(
+              t('Đội ngũ phát triển', 'Development Team'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            
+            Text(
+              t(
+                'Piano Flashcards được phát triển bởi một nhóm các nhà phát triển ứng dụng và giáo dục âm nhạc, với mục tiêu giúp người học toàn thế giới có thể tiếp cận giáo dục âm nhạc chất lượng cao.',
+                'Piano Flashcards is developed by a team of app developers and music educators, dedicated to making quality music education accessible to learners worldwide.',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(BuildContext context, IconData icon, String title, String description) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Theme.of(context).colorScheme.primary,
+            size: 32,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Contact Page: displays contact information and contact form.
+class ContactPage extends StatefulWidget {
+  const ContactPage({super.key});
+
+  @override
+  State<ContactPage> createState() => _ContactPageState();
+}
+
+class _ContactPageState extends State<ContactPage> {
+  final _emailController = TextEditingController();
+  final _subjectController = TextEditingController();
+  final _messageController = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _subjectController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  void _submitForm() {
+    if (_emailController.text.isEmpty || _messageController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(t(
+            'Vui lòng điền vào tất cả các trường',
+            'Please fill in all fields',
+          )),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    // Simulate sending email (in production, call backend API)
+    Future.delayed(const Duration(seconds: 1), () {
+      setState(() => _isSubmitting = false);
+      _emailController.clear();
+      _subjectController.clear();
+      _messageController.clear();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(t(
+            'Cảm ơn! Chúng tôi sẽ phản hồi sớm.',
+            'Thank you! We will respond soon.',
+          )),
+          backgroundColor: Colors.green,
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(t('Liên hệ', 'Contact')),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Text(
+              t('Liên hệ với chúng tôi', 'Get in Touch'),
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 12),
+
+            Text(
+              t(
+                'Có câu hỏi hoặc đề xuất? Hãy liên hệ với chúng tôi qua email hoặc form bên dưới.',
+                'Have questions or suggestions? Contact us via email or the form below.',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+
+            // Contact info section
+            Text(
+              t('Thông tin liên hệ', 'Contact Information'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+
+            _buildContactInfoItem(
+              context,
+              Icons.email,
+              t('Email', 'Email'),
+              'support@pianoflashcards.com',
+            ),
+            const SizedBox(height: 12),
+
+            _buildContactInfoItem(
+              context,
+              Icons.public,
+              t('Website', 'Website'),
+              'www.pianoflashcards.com',
+            ),
+            const SizedBox(height: 24),
+
+            // Social links
+            Text(
+              t('Theo dõi chúng tôi', 'Follow Us'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                _buildSocialButton(context, Icons.facebook, 'Facebook'),
+                const SizedBox(width: 12),
+                _buildSocialButton(context, Icons.language, 'Twitter'),
+                const SizedBox(width: 12),
+                _buildSocialButton(context, Icons.link, 'Instagram'),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Contact form
+            Text(
+              t('Gửi tin nhắn', 'Send Message'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                hintText: t('Email của bạn', 'Your email'),
+                prefixIcon: const Icon(Icons.email),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: _subjectController,
+              decoration: InputDecoration(
+                hintText: t('Chủ đề', 'Subject'),
+                prefixIcon: const Icon(Icons.subject),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            TextField(
+              controller: _messageController,
+              decoration: InputDecoration(
+                hintText: t('Tin nhắn', 'Message'),
+                prefixIcon: const Icon(Icons.message),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              maxLines: 5,
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitForm,
+                child: _isSubmitting
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(t('Gửi', 'Send')),
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContactInfoItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Colors.grey,
+                ),
+              ),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialButton(BuildContext context, IconData icon, String label) {
+    return Tooltip(
+      message: label,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: IconButton(
+          icon: Icon(icon),
+          color: Theme.of(context).colorScheme.primary,
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(t('Chuyển hướng tới ', 'Redirecting to ') + label)),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Privacy Policy Page: displays privacy policy content.
+class PrivacyPolicyPage extends StatelessWidget {
+  const PrivacyPolicyPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Introduction
+            _buildSection(
+              context,
+              t('Giới thiệu', 'Introduction'),
+              t(
+                'Piano Flashcards ("chúng tôi", "chúng tôi", hoặc "công ty") cam kết bảo vệ quyền riêng tư của bạn. Chính sách bảo mật này giải thích cách chúng tôi thu thập, sử dụng, tiết lộ và bảo safeguard thông tin của bạn.',
+                'Piano Flashcards ("we", "us", or "company") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information.',
+              ),
+            ),
+
+            // Data Collection
+            _buildSection(
+              context,
+              t('Thu thập dữ liệu', 'Data Collection'),
+              t(
+                'Chúng tôi chỉ thu thập dữ liệu cần thiết để cải thiện ứng dụng của bạn, chẳng hạn như:\n• Tên người chơi\n• Điểm số và tiến độ học tập\n• Cài đặt ứng dụng (chẳng hạn như ngôn ngữ được chọn)',
+                'We only collect data necessary to improve your app experience, such as:\n• Player name\n• Scores and learning progress\n• App settings (such as selected language)',
+              ),
+            ),
+
+            // Data Usage
+            _buildSection(
+              context,
+              t('Sử dụng dữ liệu', 'Data Usage'),
+              t(
+                'Thông tin chúng tôi thu thập được sử dụng để:\n• Cải thiện trải nghiệm người dùng\n• Theo dõi tiến độ học tập\n• Cá nhân hóa nội dung\n• Phân tích các xu hướng sử dụng',
+                'The information we collect is used to:\n• Improve user experience\n• Track learning progress\n• Personalize content\n• Analyze usage trends',
+              ),
+            ),
+
+            // Local Storage
+            _buildSection(
+              context,
+              t('Lưu trữ cục bộ', 'Local Storage'),
+              t(
+                'Tất cả dữ liệu của bạn được lưu trữ cục bộ trên thiết bị của bạn. Chúng tôi không chia sẻ thông tin cá nhân của bạn với bất kỳ bên thứ ba nào mà không có sự đồng ý của bạn.',
+                'All your data is stored locally on your device. We do not share your personal information with any third party without your consent.',
+              ),
+            ),
+
+            // Security
+            _buildSection(
+              context,
+              t('Bảo mật', 'Security'),
+              t(
+                'Chúng tôi sử dụng các biện pháp bảo mật tiêu chuẩn để bảo vệ thông tin của bạn khỏi truy cập, thay đổi, tiết lộ hoặc hủy diệt trái phép.',
+                'We use standard security measures to protect your information from unauthorized access, alteration, disclosure, or destruction.',
+              ),
+            ),
+
+            // Changes to Policy
+            _buildSection(
+              context,
+              t('Thay đổi chính sách', 'Changes to Policy'),
+              t(
+                'Chúng tôi có thể cập nhật chính sách bảo mật này theo thời gian. Chúng tôi sẽ thông báo cho bạn về bất kỳ thay đổi nào bằng cách đăng chính sách mới trên trang này.',
+                'We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new policy on this page.',
+              ),
+            ),
+
+            // Contact for Privacy
+            _buildSection(
+              context,
+              t('Liên hệ', 'Contact'),
+              t(
+                'Nếu bạn có bất kỳ câu hỏi nào về chính sách bảo mật này, vui lòng liên hệ với chúng tôi tại privacy@pianoflashcards.com',
+                'If you have any questions about this Privacy Policy, please contact us at privacy@pianoflashcards.com',
+              ),
+            ),
+
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection(BuildContext context, String title, String content) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          content,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
