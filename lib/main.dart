@@ -7,6 +7,21 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
 
+// Global locale notifier ("vi" or "en"). Initialized in main().
+late ValueNotifier<String> gLocaleNotifier;
+
+/// Convenience translator that returns the Vietnamese or English text based
+/// on the current global locale.
+String t(String vi, String en) => gLocaleNotifier.value == 'vi' ? vi : en;
+
+/// Toggle the global locale and persist to SharedPreferences.
+Future<void> toggleLocale() async {
+  final prefs = await SharedPreferences.getInstance();
+  final next = gLocaleNotifier.value == 'vi' ? 'en' : 'vi';
+  await prefs.setString('locale', next);
+  gLocaleNotifier.value = next;
+}
+
 // Global audio player and helper to play note assets by index.
 final AudioPlayer _globalAudioPlayer = AudioPlayer();
 
@@ -43,13 +58,23 @@ List<int> makeOptionsRandom(int correct, Random rnd, {int count = 4}) {
 ///    performance over several rounds. The design is deliberately
 ///    minimalistic, using large buttons and clear typography to remain
 ///    approachable for children and new learners.
-void main() {
-  runApp(const NoteFlashcardApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final saved = prefs.getString('locale') ?? 'vi';
+  gLocaleNotifier = ValueNotifier<String>(saved);
+
+  runApp(ValueListenableBuilder<String>(
+    valueListenable: gLocaleNotifier,
+    builder: (context, locale, _) => NoteFlashcardApp(locale: locale),
+  ));
 }
 
 /// Root widget of the flashcard application.
 class NoteFlashcardApp extends StatelessWidget {
-  const NoteFlashcardApp({super.key});
+  final String locale;
+
+  const NoteFlashcardApp({super.key, required this.locale});
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +87,9 @@ class NoteFlashcardApp extends StatelessWidget {
         colorSchemeSeed: Colors.indigo,
         brightness: Brightness.light,
       ),
-      home: const HomeScreen(),
+      // Use a ValueKey derived from the locale so HomeScreen is recreated
+      // whenever the locale changes and all t(...) calls are re-evaluated.
+      home: HomeScreen(key: ValueKey(locale)),
       onGenerateRoute: (settings) {
         if (settings.name == '/leaderboard') {
           return MaterialPageRoute(
@@ -86,7 +113,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-
   // Lazy initialize pages so state is preserved between tabs.
   late final List<Widget> _pages = [
     const LearnPage(),
@@ -95,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const ProgressPage(),
     const LeaderboardPage(),
   ];
+  // Note: locale is handled globally via gLocaleNotifier and helper t().
 
   void _onItemTapped(int index) {
     setState(() {
@@ -107,6 +134,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final isMobile = MediaQuery.of(context).size.width < 768;
     
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: toggleLocale,
+        icon: const Icon(Icons.language),
+        label: Text(gLocaleNotifier.value == 'vi' ? 'VI' : 'EN'),
+        tooltip: t('Chuyển sang English', 'Switch to Vietnamese'),
+      ),
       body: _pages[_selectedIndex],
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
@@ -114,52 +147,52 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: _onItemTapped,
               selectedItemColor: Theme.of(context).colorScheme.primary,
               unselectedItemColor: Colors.grey,
-              items: const [
+              items: [
                 BottomNavigationBarItem(
                   icon: Icon(Icons.school_outlined),
-                  label: 'Học nốt',
+                  label: t('Học nốt', 'Learn'),
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.piano),
-                  label: 'Match',
+                  label: t('Match', 'Match'),
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.quiz_outlined),
-                  label: 'Test',
+                  label: t('Test', 'Test'),
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.trending_up),
-                  label: 'Tiến bộ',
+                  label: t('Tiến bộ', 'Progress'),
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.emoji_events),
-                  label: 'Xếp hạng',
+                  label: t('Xếp hạng', 'Leaderboard'),
                 ),
               ],
             )
           : NavigationBar(
               selectedIndex: _selectedIndex,
               onDestinationSelected: _onItemTapped,
-              destinations: const [
+              destinations: [
                 NavigationDestination(
                   icon: Icon(Icons.school_outlined),
-                  label: 'Học nốt nhạc',
+                  label: t('Học nốt nhạc', 'Learn'),
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.piano),
-                  label: 'Match nốt với phím',
+                  label: t('Match nốt với phím', 'Match'),
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.quiz_outlined),
-                  label: 'Kiểm tra',
+                  label: t('Kiểm tra', 'Test'),
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.trending_up),
-                  label: 'Tiến bộ',
+                  label: t('Tiến bộ', 'Progress'),
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.emoji_events),
-                  label: 'Bảng xếp hạng',
+                  label: t('Bảng xếp hạng', 'Leaderboard'),
                 ),
               ],
             ),
@@ -440,15 +473,15 @@ class ProgressTracker {
   String _getModeLabel(String modeKey) {
     switch (modeKey) {
       case 'audio':
-        return '🎵 Nghe';
+        return t('🎵 Nghe', '🎵 Audio');
       case 'solfege':
-        return '🎼 Solfège';
+        return t('🎼 Solfège', '🎼 Solfège');
       case 'key':
-        return '⌨️ Phím';
+        return t('⌨️ Phím', '⌨️ Key');
       case 'staff':
-        return '🎼 Khuông nhạc';
+        return t('🎼 Khuông nhạc', '🎼 Staff');
       case 'mixed':
-        return '🎲 Trộn lẫn';
+        return t('🎲 Trộn lẫn', '🎲 Mixed');
       default:
         return modeKey;
     }
@@ -856,7 +889,7 @@ class _LearnPageState extends State<LearnPage> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
                                 child: Text(
-                                  '${currentNote.international} (${currentNote.solfege})',
+                                    '${currentNote.international} (${currentNote.solfege})',
                                   style: TextStyle(
                                     fontSize: isMobile ? 18 : 22,
                                     fontWeight: FontWeight.bold,
@@ -907,8 +940,8 @@ class _LearnPageState extends State<LearnPage> {
             // Instruction text
             Text(
               _useStaffNotation
-                  ? 'Chạm để xem tên nốt'
-                  : 'Chạm vào thẻ để xem ${_showAnswer ? 'tên nốt' : 'tên solfège'}',
+                  ? t('Chạm để xem tên nốt', 'Tap to view note name')
+                  : (_showAnswer ? t('Chạm vào thẻ để xem tên nốt', 'Tap the card to view note name') : t('Chạm vào thẻ để xem tên solfège', 'Tap the card to view solfège name')),
               style: TextStyle(fontSize: isMobile ? 14 : 16),
               textAlign: TextAlign.center,
             ),
@@ -925,7 +958,7 @@ class _LearnPageState extends State<LearnPage> {
                         child: ElevatedButton.icon(
                           onPressed: _toggleAnswer,
                           icon: const Icon(Icons.flip),
-                          label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                          label: Text(_showAnswer ? t('Ẩn', 'Hide') : t('Hiện', 'Show')),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -933,7 +966,7 @@ class _LearnPageState extends State<LearnPage> {
                         child: FilledButton.icon(
                           onPressed: _nextCard,
                           icon: const Icon(Icons.navigate_next),
-                          label: const Text('Tiếp'),
+                          label: Text(t('Tiếp', 'Next')),
                         ),
                       ),
                     ],
@@ -946,7 +979,7 @@ class _LearnPageState extends State<LearnPage> {
                         child: ElevatedButton.icon(
                           onPressed: _isPlaying ? null : _playCurrentNote,
                           icon: const Icon(Icons.volume_up),
-                          label: Text(_isPlaying ? 'Phát...' : 'Nghe'),
+                          label: Text(_isPlaying ? t('Phát...', "Playing...") : t('Nghe', 'Listen')),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -954,7 +987,7 @@ class _LearnPageState extends State<LearnPage> {
                         child: ElevatedButton.icon(
                           onPressed: _listenMode ? _stopListenMode : _startListenMode,
                           icon: const Icon(Icons.hearing),
-                          label: Text(_listenMode ? 'Thoát' : 'Chọn'),
+                          label: Text(_listenMode ? t('Thoát', 'Exit') : t('Chọn', 'Choose')),
                         ),
                       ),
                     ],
@@ -968,25 +1001,25 @@ class _LearnPageState extends State<LearnPage> {
                   ElevatedButton.icon(
                     onPressed: _toggleAnswer,
                     icon: const Icon(Icons.flip),
-                    label: Text(_showAnswer ? 'Ẩn' : 'Hiện'),
+                    label: Text(_showAnswer ? t('Ẩn', 'Hide') : t('Hiện', 'Show')),
                   ),
                   const SizedBox(width: 16),
                   FilledButton.icon(
                     onPressed: _nextCard,
                     icon: const Icon(Icons.navigate_next),
-                    label: const Text('Tiếp theo'),
+                    label: Text(t('Tiếp theo', 'Next')),
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton.icon(
                     onPressed: _isPlaying ? null : _playCurrentNote,
                     icon: const Icon(Icons.volume_up),
-                    label: Text(_isPlaying ? 'Đang phát...' : 'Nghe'),
+                    label: Text(_isPlaying ? t('Đang phát...', 'Playing...') : t('Nghe', 'Listen')),
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton.icon(
                     onPressed: _listenMode ? _stopListenMode : _startListenMode,
                     icon: const Icon(Icons.hearing),
-                    label: Text(_listenMode ? 'Thoát nghe' : 'Nghe & Chọn'),
+                    label: Text(_listenMode ? t('Thoát nghe', 'Exit listening') : t('Nghe & Chọn', 'Listen & Choose')),
                   ),
                 ],
               ),
@@ -1001,7 +1034,7 @@ class _LearnPageState extends State<LearnPage> {
                         child: FilledButton.icon(
                           onPressed: () => playNoteAssetByIndex(_currentIndex),
                           icon: const Icon(Icons.volume_up),
-                          label: const Text('Nghe nốt'),
+                          label: Text(t('Nghe nốt', 'Play note')),
                         ),
                       ),
                       SizedBox(height: verticalPadding),
@@ -1015,9 +1048,9 @@ class _LearnPageState extends State<LearnPage> {
                             onPressed: () {
                               setState(() {
                                 if (idx == _currentIndex) {
-                                  _learnFeedback = 'Đúng!';
+                                  _learnFeedback = 'correct';
                                 } else {
-                                  _learnFeedback = 'Sai';
+                                  _learnFeedback = 'wrong';
                                 }
                                 // play selection sound
                                 playNoteAssetByIndex(idx);
@@ -1031,7 +1064,10 @@ class _LearnPageState extends State<LearnPage> {
                         Padding(
                           padding: const EdgeInsets.only(top: 12.0),
                           child: Center(
-                            child: Text(_learnFeedback!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'Đúng!' ? Colors.green : Colors.red)),
+                            child: Text(
+                              _learnFeedback == 'correct' ? t('Đúng!', 'Correct!') : t('Sai', 'Wrong'),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _learnFeedback == 'correct' ? Colors.green : Colors.red),
+                            ),
                           ),
                         ),
                     ],
@@ -1222,9 +1258,9 @@ class _MatchPageState extends State<MatchPage> {
       // play the sound for the tapped key
       playNoteAssetByIndex(index);
       if (index == _currentNoteIndex) {
-        _feedback = 'Chính xác!';
+        _feedback = 'correct';
       } else {
-        _feedback = 'Sai rồi :(';    
+        _feedback = 'wrong';    
       }
     });
     Future.delayed(const Duration(seconds: 1), () {
@@ -1249,14 +1285,14 @@ class _MatchPageState extends State<MatchPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Match nốt với phím',
+                t('Match nốt với phím', 'Match note to key'),
                 style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: verticalPadding),
               // Display the note to match
               Text(
-                'Hãy chọn phím tương ứng với nốt:',
+                t('Hãy chọn phím tương ứng với nốt:', 'Choose the key corresponding to the note:'),
                 style: TextStyle(fontSize: isMobile ? 16 : 18),
                 textAlign: TextAlign.center,
               ),
@@ -1276,13 +1312,11 @@ class _MatchPageState extends State<MatchPage> {
               if (_feedback != null)
                 Center(
                   child: Text(
-                    _feedback!,
+                    _feedback == 'correct' ? t('Chính xác!', 'Correct!') : t('Sai rồi :(', 'Wrong :('),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: _feedback == 'Chính xác!'
-                          ? Colors.green
-                          : Colors.red,
+                      color: _feedback == 'correct' ? Colors.green : Colors.red,
                     ),
                   ),
                 ),
@@ -1359,12 +1393,12 @@ class _TestPageState extends State<TestPage> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Nhập tên của bạn'),
+          title: Text(t('Nhập tên của bạn', 'Enter your name')),
           content: TextField(
             controller: nameController,
-            decoration: const InputDecoration(
-              hintText: 'Nhập tên người chơi',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: t('Nhập tên người chơi', 'Enter player name'),
+              border: const OutlineInputBorder(),
             ),
             onSubmitted: (value) {
               if (value.isNotEmpty) {
@@ -1384,11 +1418,11 @@ class _TestPageState extends State<TestPage> {
                   Navigator.of(context).pop();
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Vui lòng nhập tên')),
+                    SnackBar(content: Text(t('Vui lòng nhập tên', 'Please enter a name'))),
                   );
                 }
               },
-              child: const Text('Xác nhận'),
+              child: Text(t('Xác nhận', 'Confirm')),
             ),
           ],
         );
@@ -1489,7 +1523,7 @@ class _TestPageState extends State<TestPage> {
       final correctIndex = currentQ.noteIndex;
       if (index == correctIndex) {
         _score++;
-        _feedback = 'Đúng!';
+        _feedback = 'correct';
         // Track score by category
         switch (currentQ.mode) {
           case TestMode.audioToNote:
@@ -1509,7 +1543,7 @@ class _TestPageState extends State<TestPage> {
             break;
         }
       } else {
-        _feedback = 'Sai';
+        _feedback = 'wrong';
       }
     });
     Future.delayed(const Duration(milliseconds: 600), () {
@@ -1541,7 +1575,7 @@ class _TestPageState extends State<TestPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '🎉 Hoàn thành kiểm tra!',
+                  t('🎉 Hoàn thành kiểm tra!', '🎉 Test Complete!'),
                   style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
@@ -1553,7 +1587,7 @@ class _TestPageState extends State<TestPage> {
                     child: Column(
                       children: [
                         Text(
-                          'Tổng điểm',
+                          t('Tổng điểm', 'Total Score'),
                           style: TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                         Text(
@@ -1561,7 +1595,7 @@ class _TestPageState extends State<TestPage> {
                           style: TextStyle(fontSize: isMobile ? 32 : 48, fontWeight: FontWeight.bold, color: Colors.blue),
                         ),
                         Text(
-                          'Độ chính xác: $accuracy%',
+                          t('Độ chính xác: $accuracy%', 'Accuracy: $accuracy%'),
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ],
@@ -1570,19 +1604,19 @@ class _TestPageState extends State<TestPage> {
                 ),
                 SizedBox(height: verticalPadding),
                 if (_mode == TestMode.mixed || _audioScore > 0)
-                  _buildScoreCard('🎵 Nghe nhạc', _audioScore, 'Audio'),
+                  _buildScoreCard(t('🎵 Nghe nhạc', '🎵 Audio'), _audioScore, 'Audio'),
                 if (_mode == TestMode.mixed || _solfegeScore > 0)
-                  _buildScoreCard('🎼 Solfège', _solfegeScore, 'Solfège'),
+                  _buildScoreCard(t('🎼 Solfège', '🎼 Solfège'), _solfegeScore, 'Solfège'),
                 if (_mode == TestMode.mixed || _keyScore > 0)
-                  _buildScoreCard('⌨️ Phím', _keyScore, 'Keys'),
+                  _buildScoreCard(t('⌨️ Phím', '⌨️ Keys'), _keyScore, 'Keys'),
                 SizedBox(height: verticalPadding),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _restartTest,
-                        child: const Text('Làm lại'),
-                      ),
+                          onPressed: _restartTest,
+                          child: Text(t('Làm lại', 'Retry')),
+                        ),
                     ),
                   ],
                 ),
@@ -1626,17 +1660,17 @@ class _TestPageState extends State<TestPage> {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Kiểm tra:'),
+                        Text(t('Kiểm tra:', 'Test:')),
                         SizedBox(height: verticalPadding),
                         DropdownButton<TestMode>(
                           isExpanded: true,
                           value: _mode,
-                          items: const [
-                            DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
-                            DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
-                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
-                            DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
-                    DropdownMenuItem(value: TestMode.staffNotation, child: Text('Khuông nhạc -> Nốt')),
+                          items: [
+                            DropdownMenuItem(value: TestMode.mixed, child: Text(t('Trộn (100)', 'Mixed (100)'))),
+                            DropdownMenuItem(value: TestMode.audioToNote, child: Text(t('Nghe -> Nốt', 'Audio -> Note'))),
+                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text(t('Solfège -> Quốc tế', 'Solfège -> Intl'))),
+                            DropdownMenuItem(value: TestMode.intlToKey, child: Text(t('Quốc tế -> Phím', 'Intl -> Key'))),
+                            DropdownMenuItem(value: TestMode.staffNotation, child: Text(t('Khuông nhạc -> Nốt', 'Staff -> Note'))),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
@@ -1648,7 +1682,7 @@ class _TestPageState extends State<TestPage> {
                         ),
                         SizedBox(height: verticalPadding),
                         Center(
-                          child: Text('Câu ${_currentQuestion + 1}/$_totalQuestions',
+                          child: Text(t('Câu ${_currentQuestion + 1}/$_totalQuestions', 'Q ${_currentQuestion + 1}/$_totalQuestions'),
                               style: const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ],
@@ -1656,16 +1690,16 @@ class _TestPageState extends State<TestPage> {
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('Kiểm tra:'),
+                        Text(t('Kiểm tra:', 'Test:')),
                         const SizedBox(width: 8),
                         DropdownButton<TestMode>(
                           value: _mode,
-                          items: const [
-                            DropdownMenuItem(value: TestMode.mixed, child: Text('Trộn (100)')),
-                            DropdownMenuItem(value: TestMode.audioToNote, child: Text('Nghe -> Nốt')),
-                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text('Solfège -> Quốc tế')),
-                            DropdownMenuItem(value: TestMode.intlToKey, child: Text('Quốc tế -> Phím')),
-                            DropdownMenuItem(value: TestMode.staffNotation, child: Text('Khuông nhạc -> Nốt')),
+                          items: [
+                            DropdownMenuItem(value: TestMode.mixed, child: Text(t('Trộn (100)', 'Mixed (100)'))),
+                            DropdownMenuItem(value: TestMode.audioToNote, child: Text(t('Nghe -> Nốt', 'Audio -> Note'))),
+                            DropdownMenuItem(value: TestMode.solfegeToIntl, child: Text(t('Solfège -> Quốc tế', 'Solfège -> Intl'))),
+                            DropdownMenuItem(value: TestMode.intlToKey, child: Text(t('Quốc tế -> Phím', 'Intl -> Key'))),
+                            DropdownMenuItem(value: TestMode.staffNotation, child: Text(t('Khuông nhạc -> Nốt', 'Staff -> Note'))),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
@@ -1676,7 +1710,7 @@ class _TestPageState extends State<TestPage> {
                           },
                         ),
                         const SizedBox(width: 16),
-                        Text('Câu ${_currentQuestion + 1}/$_totalQuestions'),
+                        Text(t('Câu ${_currentQuestion + 1}/$_totalQuestions', 'Q ${_currentQuestion + 1}/$_totalQuestions')),
                       ],
                     ),
               SizedBox(height: verticalPadding),
@@ -1690,11 +1724,11 @@ class _TestPageState extends State<TestPage> {
               if (_feedback != null)
                 Center(
                   child: Text(
-                    _feedback!,
+                    _feedback == 'correct' ? t('Đúng!', 'Correct!') : t('Sai', 'Wrong'),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: _feedback == 'Đúng!' ? Colors.green : Colors.red,
+                      color: _feedback == 'correct' ? Colors.green : Colors.red,
                     ),
                   ),
                 ),
@@ -1737,13 +1771,13 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Nghe và chọn nốt đúng', 
-                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+      Text(t('Nghe và chọn nốt đúng', 'Listen and choose the correct note'), 
+        style: TextStyle(fontSize: isMobile ? 18 : 20)),
             SizedBox(height: isMobile ? 12 : 16),
             FilledButton.icon(
               onPressed: () => playNoteAssetByIndex(q.noteIndex),
               icon: const Icon(Icons.volume_up),
-              label: const Text('Nghe nốt'),
+              label: Text(t('Nghe nốt', 'Play note')),
             ),
             SizedBox(height: isMobile ? 16 : 24),
             Wrap(
@@ -1765,8 +1799,8 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Chọn tên quốc tế cho: ${note.solfege}', 
-                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+      Text(t('Chọn tên quốc tế cho: ${note.solfege}', 'Choose international name for: ${note.solfege}'), 
+        style: TextStyle(fontSize: isMobile ? 18 : 20)),
             SizedBox(height: isMobile ? 16 : 24),
             Wrap(
               spacing: isMobile ? 8 : 12,
@@ -1786,8 +1820,8 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Chọn phím tương ứng với: ${note.international}', 
-                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+      Text(t('Chọn phím tương ứng với: ${note.international}', 'Choose the key corresponding to: ${note.international}'), 
+        style: TextStyle(fontSize: isMobile ? 18 : 20)),
             SizedBox(height: isMobile ? 16 : 24),
             PianoKeys(
               highlightedIndex: _selectedIndex,
@@ -1800,8 +1834,8 @@ class _TestPageState extends State<TestPage> {
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('Đọc nốt từ khuông nhạc', 
-                style: TextStyle(fontSize: isMobile ? 18 : 20)),
+      Text(t('Đọc nốt từ khuông nhạc', 'Read the note from the staff'), 
+        style: TextStyle(fontSize: isMobile ? 18 : 20)),
             SizedBox(height: isMobile ? 12 : 16),
             if (isMobile)
               SizedBox(
@@ -1822,8 +1856,8 @@ class _TestPageState extends State<TestPage> {
                 ),
               ),
             SizedBox(height: isMobile ? 12 : 16),
-            Text('Chọn tên nốt đúng', 
-                style: TextStyle(fontSize: isMobile ? 14 : 16, fontStyle: FontStyle.italic)),
+      Text(t('Chọn tên nốt đúng', 'Choose the correct note name'), 
+        style: TextStyle(fontSize: isMobile ? 14 : 16, fontStyle: FontStyle.italic)),
             SizedBox(height: isMobile ? 8 : 12),
             Wrap(
               spacing: isMobile ? 6 : 10,
@@ -1922,7 +1956,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '🏆 Bảng Xếp Hạng',
+                t('🏆 Bảng Xếp Hạng', '🏆 Leaderboard'),
                 style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
@@ -1933,7 +1967,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                 child: Row(
                   children: [
                     FilterChip(
-                      label: const Text('Tất cả'),
+                      label: Text(t('Tất cả', 'All')),
                       selected: _filterMode == null,
                       onSelected: (_) {
                         setState(() => _filterMode = null);
@@ -1941,7 +1975,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: const Text('🎵 Nghe'),
+                      label: Text(t('🎵 Nghe', '🎵 Audio')),
                       selected: _filterMode == TestMode.audioToNote,
                       onSelected: (_) {
                         setState(() => _filterMode = TestMode.audioToNote);
@@ -1949,7 +1983,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: const Text('🎼 Solfège'),
+                      label: Text(t('🎼 Solfège', '🎼 Solfège')),
                       selected: _filterMode == TestMode.solfegeToIntl,
                       onSelected: (_) {
                         setState(() => _filterMode = TestMode.solfegeToIntl);
@@ -1957,7 +1991,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: const Text('⌨️ Phím'),
+                      label: Text(t('⌨️ Phím', '⌨️ Key')),
                       selected: _filterMode == TestMode.intlToKey,
                       onSelected: (_) {
                         setState(() => _filterMode = TestMode.intlToKey);
@@ -1965,7 +1999,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: const Text('🎼 Khuông nhạc'),
+                      label: Text(t('🎼 Khuông nhạc', '🎼 Staff')),
                       selected: _filterMode == TestMode.staffNotation,
                       onSelected: (_) {
                         setState(() => _filterMode = TestMode.staffNotation);
@@ -1980,7 +2014,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                 child: _leaderboard.isEmpty
                     ? Center(
                         child: Text(
-                          'Chưa có kết quả nào',
+                          t('Chưa có kết quả nào', 'No results yet'),
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
@@ -2027,7 +2061,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                                         ),
                                       ),
                                       Text(
-                                        '${entry.result.totalScore} điểm',
+                                        '${entry.result.totalScore} ${t('điểm', 'pts')}',
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -2091,15 +2125,15 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
   String _getModeLabel(TestMode mode) {
     switch (mode) {
       case TestMode.audioToNote:
-        return '🎵 Nghe nhạc → Chọn nốt';
+        return t('🎵 Nghe nhạc → Chọn nốt', '🎵 Audio → Note');
       case TestMode.solfegeToIntl:
-        return '🎼 Solfège → Quốc tế';
+        return t('🎼 Solfège → Quốc tế', '🎼 Solfège → Intl');
       case TestMode.intlToKey:
-        return '⌨️ Quốc tế → Phím piano';
+        return t('⌨️ Quốc tế → Phím piano', '⌨️ Intl → Piano Key');
       case TestMode.staffNotation:
-        return '🎶 Đọc khuông nhạc → Chọn nốt';
+        return t('🎶 Đọc khuông nhạc → Chọn nốt', '🎶 Read staff → Choose note');
       case TestMode.mixed:
-        return 'Trộn lẫn';
+        return t('Trộn lẫn', 'Mixed');
     }
   }
 }
@@ -2156,7 +2190,7 @@ class _ProgressPageState extends State<ProgressPage> {
 
   String _getMotivationalMessage() {
     if (_allResults.isEmpty) {
-      return '🎯 Bắt đầu một bài test để theo dõi tiến bộ!';
+      return t('🎯 Bắt đầu một bài test để theo dõi tiến bộ!', '🎯 Start a test to track your progress!');
     }
     
     // Calculate streak
@@ -2176,15 +2210,15 @@ class _ProgressPageState extends State<ProgressPage> {
     final avgScore = _allResults.map((r) => r.totalScore).reduce((a, b) => a + b) ~/ _allResults.length;
     
     if (streak >= 7) {
-      return '🔥 Tuyệt vời! Bạn đã luyện tập $streak ngày liên tiếp!';
+      return t('🔥 Tuyệt vời! Bạn đã luyện tập $streak ngày liên tiếp!', '🔥 Nice! You have practiced $streak days in a row!');
     } else if (avgScore >= 18) {
-      return '⭐ Xuất sắc! Điểm trung bình của bạn là $avgScore/20!';
+      return t('⭐ Xuất sắc! Điểm trung bình của bạn là $avgScore/20!', '⭐ Excellent! Your average score is $avgScore/20!');
     } else if (_allResults.length >= 10) {
-      return '💪 Tốt lắm! Bạn đã hoàn thành ${_allResults.length} bài test!';
+      return t('💪 Tốt lắm! Bạn đã hoàn thành ${_allResults.length} bài test!', '💪 Good job! You completed ${_allResults.length} tests!');
     } else if (_allResults.length >= 5) {
-      return '👏 Hay lắm! Tiếp tục cố gắng!';
+      return t('👏 Hay lắm! Tiếp tục cố gắng!', '👏 Nice work! Keep it up!');
     } else {
-      return '🌟 Bắt đầu tốt! Hãy tiếp tục!';
+      return t('🌟 Bắt đầu tốt! Hãy tiếp tục!', '🌟 Good start! Keep going!');
     }
   }
 
@@ -2204,7 +2238,7 @@ class _ProgressPageState extends State<ProgressPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '📈 Tiến Bộ Của Bạn',
+                  t('📈 Tiến Bộ Của Bạn', '📈 Your Progress'),
                   style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
@@ -2235,7 +2269,7 @@ class _ProgressPageState extends State<ProgressPage> {
                     children: [
                       Expanded(
                         child: _buildStatCard(
-                          '📊 Tổng bài test',
+                          t('📊 Tổng bài test', '📊 Total tests'),
                           _allResults.length.toString(),
                           Colors.orange,
                         ),
@@ -2243,7 +2277,7 @@ class _ProgressPageState extends State<ProgressPage> {
                       SizedBox(width: 12),
                       Expanded(
                         child: _buildStatCard(
-                          '⭐ Điểm cao nhất',
+                          t('⭐ Điểm cao nhất', '⭐ Best score'),
                           _allResults.map((r) => r.totalScore).reduce(max).toString() + '/20',
                           Colors.green,
                         ),
@@ -2255,15 +2289,15 @@ class _ProgressPageState extends State<ProgressPage> {
                     children: [
                       Expanded(
                         child: _buildStatCard(
-                          '📈 Điểm trung bình',
-                          (_allResults.map((r) => r.totalScore).reduce((a, b) => a + b) ~/ _allResults.length).toString() + '/20',
-                          Colors.purple,
-                        ),
+                            t('📈 Điểm trung bình', '📈 Average score'),
+                            (_allResults.map((r) => r.totalScore).reduce((a, b) => a + b) ~/ _allResults.length).toString() + '/20',
+                            Colors.purple,
+                          ),
                       ),
                       SizedBox(width: 12),
                       Expanded(
-                        child: _buildStatCard(
-                          '📅 Ngày luyện',
+                          child: _buildStatCard(
+                          t('📅 Ngày luyện', '📅 Practice days'),
                           _last7Days.length.toString(),
                           Colors.indigo,
                         ),
@@ -2275,26 +2309,25 @@ class _ProgressPageState extends State<ProgressPage> {
                 
                 // Last 7 days progress
                 Text(
-                  '📅 Tiến Bộ 7 Ngày Qua',
+                  t('📅 Tiến Bộ 7 Ngày Qua', '📅 Progress in the last 7 days'),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 SizedBox(height: 12),
-                if (_last7Days.isEmpty)
-                  Center(
-                    child: Text(
-                      'Chưa có dữ liệu',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                else
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        children: _last7Days.asMap().entries.map((entry) {
+                _last7Days.isEmpty
+                    ? Center(
+                        child: Text(
+                          t('Chưa có dữ liệu', 'No data yet'),
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: _last7Days.asMap().entries.map((entry) {
                           final daily = entry.value;
                           final dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
                           final dayOfWeek = dayNames[daily.date.weekday % 7];
@@ -2450,7 +2483,7 @@ class _ProgressPageState extends State<ProgressPage> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
-            colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
+            colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
