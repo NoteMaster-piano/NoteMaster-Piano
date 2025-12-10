@@ -92,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const LearnPage(),
     const MatchPage(),
     const TestPage(),
+    const ProgressPage(),
     const LeaderboardPage(),
   ];
 
@@ -127,6 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: 'Test',
                 ),
                 BottomNavigationBarItem(
+                  icon: Icon(Icons.trending_up),
+                  label: 'Tiến bộ',
+                ),
+                BottomNavigationBarItem(
                   icon: Icon(Icons.emoji_events),
                   label: 'Xếp hạng',
                 ),
@@ -147,6 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 NavigationDestination(
                   icon: Icon(Icons.quiz_outlined),
                   label: 'Kiểm tra',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.trending_up),
+                  label: 'Tiến bộ',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.emoji_events),
@@ -225,6 +234,225 @@ class LeaderboardEntry {
     required this.result,
     required this.accuracy,
   });
+}
+
+/// Daily progress tracking - store one entry per day
+class DailyProgress {
+  final DateTime date;
+  final int testsCompleted; // Number of tests done today
+  final int averageScore; // Average score across all tests today
+  final int bestScore; // Best score today
+  final Map<String, int> categoryScores; // Score by test mode (audioToNote, solfegeToIntl, etc)
+
+  DailyProgress({
+    required this.date,
+    required this.testsCompleted,
+    required this.averageScore,
+    required this.bestScore,
+    required this.categoryScores,
+  });
+
+  // Get date string in format YYYY-MM-DD for storage key
+  String get dateKey => '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Map<String, dynamic> toJson() => {
+    'date': date.toIso8601String(),
+    'testsCompleted': testsCompleted,
+    'averageScore': averageScore,
+    'bestScore': bestScore,
+    'categoryScores': categoryScores,
+  };
+
+  factory DailyProgress.fromJson(Map<String, dynamic> json) => DailyProgress(
+    date: DateTime.parse(json['date'] as String),
+    testsCompleted: json['testsCompleted'] as int,
+    averageScore: json['averageScore'] as int,
+    bestScore: json['bestScore'] as int,
+    categoryScores: Map<String, int>.from(json['categoryScores'] as Map? ?? {}),
+  );
+}
+
+/// Category progress - track performance by test mode
+class CategoryProgress {
+  final String categoryName; // audioToNote, solfegeToIntl, etc
+  final int totalTests; // Total tests in this category
+  final int averageScore; // Average score across all tests in category
+  final int bestScore; // Best score in this category
+  final List<int> last7Days; // Last 7 days scores for trending
+
+  CategoryProgress({
+    required this.categoryName,
+    required this.totalTests,
+    required this.averageScore,
+    required this.bestScore,
+    required this.last7Days,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'categoryName': categoryName,
+    'totalTests': totalTests,
+    'averageScore': averageScore,
+    'bestScore': bestScore,
+    'last7Days': last7Days,
+  };
+
+  factory CategoryProgress.fromJson(Map<String, dynamic> json) => CategoryProgress(
+    categoryName: json['categoryName'] as String,
+    totalTests: json['totalTests'] as int,
+    averageScore: json['averageScore'] as int,
+    bestScore: json['bestScore'] as int,
+    last7Days: List<int>.from(json['last7Days'] as List? ?? []),
+  );
+}
+
+/// Helper class to manage progress tracking data
+class ProgressTracker {
+  late SharedPreferences _prefs;
+  
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  /// Save or update today's progress when a test is completed
+  Future<void> recordTestResult(TestResult result) async {
+    final today = DateTime.now();
+    final dateKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    
+    // Get existing daily progress
+    final existingJson = _prefs.getString('daily_progress_$dateKey');
+    DailyProgress dailyProgress;
+    
+    if (existingJson != null) {
+      dailyProgress = DailyProgress.fromJson(jsonDecode(existingJson) as Map<String, dynamic>);
+    } else {
+      dailyProgress = DailyProgress(
+        date: today,
+        testsCompleted: 0,
+        averageScore: 0,
+        bestScore: 0,
+        categoryScores: {},
+      );
+    }
+    
+    // Update daily progress
+    final newTestCount = dailyProgress.testsCompleted + 1;
+    final newAverageScore = ((dailyProgress.averageScore * dailyProgress.testsCompleted) + result.totalScore) ~/ newTestCount;
+    final newBestScore = max(dailyProgress.bestScore, result.totalScore);
+    
+    // Update category score
+    final modeKey = _getModeName(result.mode);
+    final currentCategoryScore = dailyProgress.categoryScores[modeKey] ?? 0;
+    final newCategoryScore = ((currentCategoryScore * dailyProgress.categoryScores.length) + result.totalScore) ~/ (dailyProgress.categoryScores.length + 1);
+    
+    final updatedCategoryScores = {...dailyProgress.categoryScores};
+    updatedCategoryScores[modeKey] = newCategoryScore;
+    
+    final updatedDaily = DailyProgress(
+      date: today,
+      testsCompleted: newTestCount,
+      averageScore: newAverageScore,
+      bestScore: newBestScore,
+      categoryScores: updatedCategoryScores,
+    );
+    
+    // Save to SharedPreferences
+    await _prefs.setString('daily_progress_$dateKey', jsonEncode(updatedDaily.toJson()));
+  }
+
+  /// Get progress for last N days
+  Future<List<DailyProgress>> getLast7DaysProgress() async {
+    final results = <DailyProgress>[];
+    final now = DateTime.now();
+    
+    for (int i = 0; i < 7; i++) {
+      final date = now.subtract(Duration(days: i));
+      final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final json = _prefs.getString('daily_progress_$dateKey');
+      
+      if (json != null) {
+        results.add(DailyProgress.fromJson(jsonDecode(json) as Map<String, dynamic>));
+      }
+    }
+    
+    return results.reversed.toList();
+  }
+
+  /// Get category progress summary
+  Future<List<CategoryProgress>> getCategoryProgress(List<TestResult> allResults) async {
+    final categoryMap = <String, List<int>>{};
+    
+    // Group results by category
+    for (final result in allResults) {
+      final modeKey = _getModeName(result.mode);
+      categoryMap.putIfAbsent(modeKey, () => []);
+      categoryMap[modeKey]!.add(result.totalScore);
+    }
+    
+    // Calculate stats for each category
+    final categoryProgress = <CategoryProgress>[];
+    categoryMap.forEach((modeKey, scores) {
+      if (scores.isNotEmpty) {
+        final avg = scores.reduce((a, b) => a + b) ~/ scores.length;
+        final best = scores.reduce(max);
+        
+        // Get last 7 days of this category
+        final last7 = <int>[];
+        final now = DateTime.now();
+        for (int i = 0; i < 7; i++) {
+          final date = now.subtract(Duration(days: i));
+          final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+          final json = _prefs.getString('daily_progress_$dateKey');
+          if (json != null) {
+            final daily = DailyProgress.fromJson(jsonDecode(json) as Map<String, dynamic>);
+            final score = daily.categoryScores[modeKey] ?? 0;
+            if (score > 0) last7.add(score);
+          }
+        }
+        
+        categoryProgress.add(CategoryProgress(
+          categoryName: _getModeLabel(modeKey),
+          totalTests: scores.length,
+          averageScore: avg,
+          bestScore: best,
+          last7Days: last7.reversed.toList(),
+        ));
+      }
+    });
+    
+    return categoryProgress;
+  }
+
+  String _getModeName(TestMode mode) {
+    switch (mode) {
+      case TestMode.audioToNote:
+        return 'audio';
+      case TestMode.solfegeToIntl:
+        return 'solfege';
+      case TestMode.intlToKey:
+        return 'key';
+      case TestMode.staffNotation:
+        return 'staff';
+      case TestMode.mixed:
+        return 'mixed';
+    }
+  }
+
+  String _getModeLabel(String modeKey) {
+    switch (modeKey) {
+      case 'audio':
+        return '🎵 Nghe';
+      case 'solfege':
+        return '🎼 Solfège';
+      case 'key':
+        return '⌨️ Phím';
+      case 'staff':
+        return '🎼 Khuông nhạc';
+      case 'mixed':
+        return '🎲 Trộn lẫn';
+      default:
+        return modeKey;
+    }
+  }
 }
 
 /// Static list of supported notes. The order follows ascending pitch from C to B.
@@ -1184,6 +1412,11 @@ class _TestPageState extends State<TestPage> {
     final resultsJson = _prefs.getStringList('testResults') ?? [];
     resultsJson.add(jsonEncode(result.toJson()));
     await _prefs.setStringList('testResults', resultsJson);
+    
+    // Also save to progress tracker
+    final progressTracker = ProgressTracker();
+    await progressTracker.init();
+    await progressTracker.recordTestResult(result);
   }
 
   void _prepareTest() {
@@ -1349,16 +1582,6 @@ class _TestPageState extends State<TestPage> {
                       child: OutlinedButton(
                         onPressed: _restartTest,
                         child: const Text('Làm lại'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () {
-                          // Navigate to leaderboard using named route
-                          Navigator.of(context).pushNamed('/leaderboard');
-                        },
-                        child: const Text('Xem Leaderboard'),
                       ),
                     ),
                   ],
@@ -1881,5 +2104,386 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
   }
 }
 
+/// Progress tracking page showing daily improvements and motivational stats
+class ProgressPage extends StatefulWidget {
+  const ProgressPage({super.key});
+
+  @override
+  State<ProgressPage> createState() => _ProgressPageState();
+}
+
+class _ProgressPageState extends State<ProgressPage> {
+  late ProgressTracker _progressTracker;
+  List<DailyProgress> _last7Days = [];
+  List<CategoryProgress> _categoryProgress = [];
+  List<TestResult> _allResults = [];
+  late SharedPreferences _prefs;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressTracker = ProgressTracker();
+    _loadProgress();
+  }
+
+  Future<void> _loadProgress() async {
+    _prefs = await SharedPreferences.getInstance();
+    await _progressTracker.init();
+    
+    // Load all test results
+    final resultsJson = _prefs.getStringList('testResults') ?? [];
+    final results = <TestResult>[];
+    for (final json in resultsJson) {
+      try {
+        results.add(TestResult.fromJson(jsonDecode(json) as Map<String, dynamic>));
+      } catch (e) {
+        print('Error parsing result: $e');
+      }
+    }
+    
+    // Load last 7 days progress
+    final last7 = await _progressTracker.getLast7DaysProgress();
+    
+    // Load category progress
+    final categoryProgress = await _progressTracker.getCategoryProgress(results);
+    
+    setState(() {
+      _allResults = results;
+      _last7Days = last7;
+      _categoryProgress = categoryProgress;
+    });
+  }
+
+  String _getMotivationalMessage() {
+    if (_allResults.isEmpty) {
+      return '🎯 Bắt đầu một bài test để theo dõi tiến bộ!';
+    }
+    
+    // Calculate streak
+    int streak = 0;
+    final now = DateTime.now();
+    for (int i = 0; i < 365; i++) {
+      final date = now.subtract(Duration(days: i));
+      final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final json = _prefs.getString('daily_progress_$dateKey');
+      if (json != null) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    
+    final avgScore = _allResults.map((r) => r.totalScore).reduce((a, b) => a + b) ~/ _allResults.length;
+    
+    if (streak >= 7) {
+      return '🔥 Tuyệt vời! Bạn đã luyện tập $streak ngày liên tiếp!';
+    } else if (avgScore >= 18) {
+      return '⭐ Xuất sắc! Điểm trung bình của bạn là $avgScore/20!';
+    } else if (_allResults.length >= 10) {
+      return '💪 Tốt lắm! Bạn đã hoàn thành ${_allResults.length} bài test!';
+    } else if (_allResults.length >= 5) {
+      return '👏 Hay lắm! Tiếp tục cố gắng!';
+    } else {
+      return '🌟 Bắt đầu tốt! Hãy tiếp tục!';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final verticalPadding = isMobile ? 12.0 : 24.0;
+    final titleFontSize = isMobile ? 24.0 : 28.0;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(horizontalPadding),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '📈 Tiến Bộ Của Bạn',
+                  style: TextStyle(fontSize: titleFontSize, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: verticalPadding),
+                
+                // Motivational message
+                Card(
+                  color: Colors.blue.shade50,
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _getMotivationalMessage(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                SizedBox(height: verticalPadding),
+                
+                // Summary stats
+                if (_allResults.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          '📊 Tổng bài test',
+                          _allResults.length.toString(),
+                          Colors.orange,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          '⭐ Điểm cao nhất',
+                          _allResults.map((r) => r.totalScore).reduce(max).toString() + '/20',
+                          Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          '📈 Điểm trung bình',
+                          (_allResults.map((r) => r.totalScore).reduce((a, b) => a + b) ~/ _allResults.length).toString() + '/20',
+                          Colors.purple,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          '📅 Ngày luyện',
+                          _last7Days.length.toString(),
+                          Colors.indigo,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: verticalPadding),
+                ],
+                
+                // Last 7 days progress
+                Text(
+                  '📅 Tiến Bộ 7 Ngày Qua',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 12),
+                if (_last7Days.isEmpty)
+                  Center(
+                    child: Text(
+                      'Chưa có dữ liệu',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                else
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        children: _last7Days.asMap().entries.map((entry) {
+                          final daily = entry.value;
+                          final dayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+                          final dayOfWeek = dayNames[daily.date.weekday % 7];
+                          final formattedDate = '$dayOfWeek, ${daily.date.day.toString().padLeft(2, '0')}/${daily.date.month.toString().padLeft(2, '0')}';
+                          
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    formattedDate,
+                                    style: const TextStyle(fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    '${daily.testsCompleted}x',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: LinearProgressIndicator(
+                                      value: daily.bestScore / 20,
+                                      minHeight: 8,
+                                      backgroundColor: Colors.grey.shade200,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        daily.bestScore >= 18
+                                            ? Colors.green
+                                            : daily.bestScore >= 15
+                                                ? Colors.blue
+                                                : Colors.orange,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  '${daily.bestScore}/20',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                SizedBox(height: verticalPadding),
+                
+                // Category performance
+                Text(
+                  '🎯 Hiệu Suất Theo Loại Bài',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 12),
+                if (_categoryProgress.isEmpty)
+                  Center(
+                    child: Text(
+                      'Chưa có dữ liệu',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                else
+                  Column(
+                    children: _categoryProgress.map((category) {
+                      final avgPercent = (category.averageScore / 20 * 100).toStringAsFixed(0);
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      category.categoryName,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${category.averageScore}/20 (${avgPercent}%)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: category.averageScore / 20,
+                                    minHeight: 8,
+                                    backgroundColor: Colors.grey.shade200,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      int.parse(avgPercent) >= 90
+                                          ? Colors.green
+                                          : int.parse(avgPercent) >= 75
+                                              ? Colors.blue
+                                              : Colors.orange,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  '${category.totalTests} bài test • Điểm cao: ${category.bestScore}/20',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, Color color) {
+    return Card(
+      elevation: 2,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
   
+    
   
