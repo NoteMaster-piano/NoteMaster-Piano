@@ -149,17 +149,67 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 768;
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 900;
+    final isDesktop = screenWidth >= 900;
+
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: toggleLocale,
-        icon: const Icon(Icons.language),
-        label: Text(gLocaleNotifier.value == 'vi' ? 'VI' : 'EN'),
-        tooltip: t('Chuyển sang English', 'Switch to Vietnamese'),
+      appBar: AppBar(
+        title: Text(t('Piano Flashcards', 'Piano Flashcards')),
+        centerTitle: isMobile,
+        actions: [
+          // Language toggle button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Center(
+              child: ElevatedButton.icon(
+                onPressed: toggleLocale,
+                icon: const Icon(Icons.language, size: 20),
+                label: Text(gLocaleNotifier.value == 'vi' ? 'VI' : 'EN'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+              ),
+            ),
+          ),
+          // Menu button for desktop (opens modal or shows menu)
+          if (isDesktop)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Center(
+                child: IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showDesktopMenu(context),
+                  tooltip: t('Thêm tùy chọn', 'More options'),
+                ),
+              ),
+            ),
+        ],
       ),
-      drawer: _buildDrawer(context),
-      body: _pages[_selectedIndex],
+      drawer: isMobile || isTablet ? _buildDrawer(context) : null,
+      body: isDesktop
+          ? Row(
+              children: [
+                // Sidebar for desktop
+                Container(
+                  width: 280,
+                  color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.1),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _buildDesktopSidebar(context),
+                      ),
+                    ],
+                  ),
+                ),
+                // Main content
+                Expanded(
+                  child: _pages[_selectedIndex],
+                ),
+              ],
+            )
+          : _pages[_selectedIndex],
       bottomNavigationBar: isMobile
           ? BottomNavigationBar(
               currentIndex: _selectedIndex,
@@ -189,32 +239,163 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             )
-          : NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _onItemTapped,
-              destinations: [
-                NavigationDestination(
-                  icon: Icon(Icons.school_outlined),
-                  label: t('Học nốt nhạc', 'Learn'),
+          : isTablet
+              ? BottomNavigationBar(
+                  currentIndex: _selectedIndex,
+                  onTap: _onItemTapped,
+                  selectedItemColor: Theme.of(context).colorScheme.primary,
+                  unselectedItemColor: Colors.grey,
+                  type: BottomNavigationBarType.fixed,
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.school_outlined),
+                      label: t('Học nốt', 'Learn'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.piano),
+                      label: t('Match', 'Match'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.quiz_outlined),
+                      label: t('Test', 'Test'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.trending_up),
+                      label: t('Tiến bộ', 'Progress'),
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.emoji_events),
+                      label: t('Xếp hạng', 'Leaderboard'),
+                    ),
+                  ],
+                )
+              : null,
+    );
+  }
+
+  Widget _buildDesktopSidebar(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // App header
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.piano,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.piano),
-                  label: t('Match nốt với phím', 'Match'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.quiz_outlined),
-                  label: t('Kiểm tra', 'Test'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.trending_up),
-                  label: t('Tiến bộ', 'Progress'),
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.emoji_events),
-                  label: t('Bảng xếp hạng', 'Leaderboard'),
+                const SizedBox(height: 12),
+                Text(
+                  t('Piano Flashcards', 'Piano Flashcards'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
+          ),
+          const Divider(),
+          
+          // Navigation items
+          _buildSidebarNavItem(
+            context,
+            Icons.school_outlined,
+            t('Học nốt', 'Learn'),
+            0,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.piano,
+            t('Match', 'Match'),
+            1,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.quiz_outlined,
+            t('Test', 'Test'),
+            2,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.trending_up,
+            t('Tiến bộ', 'Progress'),
+            3,
+          ),
+          _buildSidebarNavItem(
+            context,
+            Icons.emoji_events,
+            t('Xếp hạng', 'Leaderboard'),
+            4,
+          ),
+          
+          const Divider(),
+          
+          // Menu items
+          ListTile(
+            leading: const Icon(Icons.info),
+            title: Text(t('Về ứng dụng', 'About')),
+            onTap: () => Navigator.pushNamed(context, '/about'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+          ListTile(
+            leading: const Icon(Icons.email),
+            title: Text(t('Liên hệ', 'Contact')),
+            onTap: () => Navigator.pushNamed(context, '/contact'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip),
+            title: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+            onTap: () => Navigator.pushNamed(context, '/privacy'),
+            selectedColor: Theme.of(context).colorScheme.primary,
+            selected: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarNavItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    int index,
+  ) {
+    final isSelected = _selectedIndex == index;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      selected: isSelected,
+      selectedColor: Theme.of(context).colorScheme.primary,
+      selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+      onTap: () => setState(() => _selectedIndex = index),
+    );
+  }
+
+  void _showDesktopMenu(BuildContext context) {
+    showMenu(
+      context: context,
+      position: const RelativeRect.fromLTRB(1000, 50, 0, 0),
+      items: [
+        PopupMenuItem(
+          child: Text(t('Về ứng dụng', 'About')),
+          onTap: () => Navigator.pushNamed(context, '/about'),
+        ),
+        PopupMenuItem(
+          child: Text(t('Liên hệ', 'Contact')),
+          onTap: () => Navigator.pushNamed(context, '/contact'),
+        ),
+        PopupMenuItem(
+          child: Text(t('Chính sách bảo mật', 'Privacy Policy')),
+          onTap: () => Navigator.pushNamed(context, '/privacy'),
+        ),
+      ],
     );
   }
 
@@ -246,6 +427,48 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+          // Main navigation
+          ListTile(
+            leading: const Icon(Icons.school_outlined),
+            title: Text(t('Học nốt', 'Learn')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 0);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.piano),
+            title: Text(t('Match', 'Match')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 1);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.quiz_outlined),
+            title: Text(t('Test', 'Test')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 2);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.trending_up),
+            title: Text(t('Tiến bộ', 'Progress')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 3);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.emoji_events),
+            title: Text(t('Xếp hạng', 'Leaderboard')),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _selectedIndex = 4);
+            },
+          ),
+          const Divider(),
           ListTile(
             leading: Icon(Icons.info),
             title: Text(t('Về ứng dụng', 'About')),
